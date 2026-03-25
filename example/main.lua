@@ -1,209 +1,195 @@
 -- ONNX Runtime Plugin Demo — Style Transfer + TTS
--- Combined demo showcasing two ONNX models in Solar2D
-
 local Bytemap = require("plugin.Bytemap")
 local ort = require("plugin.onnxruntime")
 
-display.setDefault("background", 0.09, 0.09, 0.11)
+display.setDefault("background", 0.07, 0.07, 0.09)
 
-local CW = display.contentWidth
-local CH = display.contentHeight
+local CW = display.contentWidth   -- 320
+local CH = display.contentHeight  -- 568
 local CX = display.contentCenterX
-local CY = display.contentCenterY
+local PAD = 14
 local SIZE = 224
 local sampleRate = 24000
 
--- ============================================================
--- Helpers
--- ============================================================
+-- ── Helpers ─────────────────────────────────────────────────
 
-local function roundRect(group, x, y, w, h, r, fillR, fillG, fillB, fillA)
-    local rect = display.newRoundedRect(group or display.currentStage, x, y, w, h, r or 8)
-    rect:setFillColor(fillR or 0.15, fillG or 0.15, fillB or 0.18, fillA or 1)
-    return rect
+local function card(y, h)
+    local r = display.newRoundedRect(CX, y, CW - PAD * 2, h, 10)
+    r:setFillColor(0.12, 0.12, 0.14)
+    r.strokeWidth = 1; r:setStrokeColor(0.2, 0.2, 0.24)
+    return r
 end
 
-local function label(text, x, y, size, r, g, b, bold)
+local function txt(text, x, y, size, bold, r, g, b)
     local t = display.newText({
         text = text, x = x, y = y,
         font = bold and native.systemFontBold or native.systemFont,
-        fontSize = size or 14
+        fontSize = size or 13
     })
-    if r then t:setFillColor(r, g or r, b or r) end
+    t:setFillColor(r or 0.7, g or 0.7, b or 0.7)
     return t
 end
 
-local function makeButton(text, x, y, w, h, r, g, b, callback)
-    local bg = display.newRoundedRect(x, y, w, h, h * 0.35)
+local function btn(text, x, y, w, h, r, g, b, cb)
+    local bg = display.newRoundedRect(x, y, w, h, h / 2)
     bg:setFillColor(r, g, b)
-    local lbl = label(text, x, y, 14, 1, 1, 1, true)
-    bg:addEventListener("tap", function() if callback then callback() end; return true end)
-    return bg, lbl
+    txt(text, x, y, 14, true, 1, 1, 1)
+    bg:addEventListener("tap", function() if cb then cb() end; return true end)
+    return bg
 end
 
--- ============================================================
--- Layout: left panel = Style Transfer, right panel = TTS
--- ============================================================
+-- ── Header ──────────────────────────────────────────────────
 
-local PAD = 16
-local panelW = (CW - PAD * 3) / 2
-local panelH = CH - PAD * 2
-local leftX = PAD + panelW / 2
-local rightX = CW - PAD - panelW / 2
+local headerH = 44
+local headerBg = display.newRect(CX, headerH / 2, CW, headerH)
+headerBg:setFillColor(0.1, 0.1, 0.13)
+txt("ONNX Runtime", CX - 20, headerH / 2, 17, true, 0.85, 0.9, 1)
+txt("for Solar2D", CX + 58, headerH / 2, 12, false, 0.45, 0.55, 0.7)
+local ver = (ort.VERSION or "?"):gsub("^v", "")
+txt("v" .. ver, CW - PAD - 12, headerH / 2, 10, false, 0.35, 0.35, 0.4)
 
--- Panel backgrounds
-local leftPanel = roundRect(nil, leftX, CY, panelW, panelH, 12, 0.13, 0.13, 0.16)
-leftPanel.strokeWidth = 1; leftPanel:setStrokeColor(0.22, 0.22, 0.28)
-local rightPanel = roundRect(nil, rightX, CY, panelW, panelH, 12, 0.13, 0.13, 0.16)
-rightPanel.strokeWidth = 1; rightPanel:setStrokeColor(0.22, 0.22, 0.28)
+-- ── Style Transfer Section ──────────────────────────────────
 
--- Title bar
-local titleBg = roundRect(nil, CX, 18, CW - 8, 30, 6, 0.12, 0.12, 0.15)
-label("ONNX Runtime for Solar2D — Plugin Demo", CX, 18, 15, 0.7, 0.85, 1, true)
+local stTop = headerH + PAD
+local stH = 310
+card(stTop + stH / 2, stH)
 
--- Version badge
-local ver = ort.VERSION or "?"
-local verBadge = label("v" .. ver:gsub("^v",""), CW - 40, 18, 11, 0.4, 0.4, 0.5)
+txt("Style Transfer", CX, stTop + 18, 15, true, 0.55, 0.78, 1)
 
--- ============================================================
--- Style Transfer (left panel)
--- ============================================================
+local imgW = 120
+local imgGap = 20
+local imgY = stTop + 18 + imgW / 2 + 24
 
-local stY = PAD + 24  -- section top
-label("Style Transfer", leftX, stY, 16, 0.55, 0.78, 1, true)
-
-local imgSize = math.min(panelW * 0.38, 130)
-local imgY = stY + imgSize / 2 + 36
-
--- Labels
-label("Original", leftX - imgSize/2 - 16, stY + 22, 11, 0.5)
-label("Styled", leftX + imgSize/2 + 16, stY + 22, 11, 0.5)
-
--- Original image
+-- Original
+txt("Original", CX - imgW / 2 - imgGap / 2, stTop + 38, 10, false, 0.4)
 local originalImage = display.newImage("test_photo.png", system.ResourceDirectory)
 if originalImage then
-    originalImage.x = leftX - imgSize/2 - 16
+    originalImage.x = CX - imgW / 2 - imgGap / 2
     originalImage.y = imgY
-    originalImage.width = imgSize
-    originalImage.height = imgSize
+    originalImage.width = imgW; originalImage.height = imgW
 end
 
 -- Arrow
-label("→", leftX, imgY, 28, 0.35, true)
+txt("→", CX, imgY, 22, true, 0.3)
 
--- Styled image placeholder
-local styledPlaceholder = roundRect(nil, leftX + imgSize/2 + 16, imgY, imgSize, imgSize, 6, 0.1, 0.1, 0.13)
-styledPlaceholder.strokeWidth = 1; styledPlaceholder:setStrokeColor(0.2)
-local placeholderText = label("?", leftX + imgSize/2 + 16, imgY, 32, 0.2)
+-- Styled placeholder
+txt("Styled", CX + imgW / 2 + imgGap / 2, stTop + 38, 10, false, 0.4)
+local styledSlot = display.newRoundedRect(CX + imgW / 2 + imgGap / 2, imgY, imgW, imgW, 6)
+styledSlot:setFillColor(0.09, 0.09, 0.11)
+styledSlot.strokeWidth = 1; styledSlot:setStrokeColor(0.18)
+local slotQ = txt("?", CX + imgW / 2 + imgGap / 2, imgY, 28, false, 0.18)
 
-local styleSession
-local styledImage
+local styleSession, styledImage
 
-local btnY = imgY + imgSize/2 + 28
-local styleStatus = label("Choose a style", leftX, btnY + 30, 12, 0.45)
-local styleTime = label("", leftX, btnY + 46, 12, 0.3, 0.9, 0.3)
+local sBtnY = imgY + imgW / 2 + 24
+local styleStatus = txt("Choose a style", CX, sBtnY + 28, 12, false, 0.4)
+local styleTime = txt("", CX, sBtnY + 44, 11, false, 0.3, 0.85, 0.4)
 
 local function imageToTensor(path)
     local bm = Bytemap.loadTexture({ filename = path, baseDir = system.ResourceDirectory })
     if not bm then return nil end
     local w, h = bm.width, bm.height
-    local byteStr = bm:GetBytes()
-    bm:releaseSelf()
-    if type(byteStr) ~= "string" then return nil end
-    local comp = #byteStr / (w * h)
-    local data = {}
-    local idx = 1
+    local bs = bm:GetBytes(); bm:releaseSelf()
+    if type(bs) ~= "string" then return nil end
+    local comp = #bs / (w * h)
+    local data, idx = {}, 1
     for c = 0, 2 do
-        for y = 0, h - 1 do
-            for x = 0, w - 1 do
-                data[idx] = string.byte(byteStr, (y * w + x) * comp + c + 1)
-                idx = idx + 1
-            end
-        end
+        for yy = 0, h - 1 do for xx = 0, w - 1 do
+            data[idx] = string.byte(bs, (yy * w + xx) * comp + c + 1); idx = idx + 1
+        end end
     end
     return data
 end
 
-local function tensorToImage(tensorData, w, h)
+local function tensorToImage(td, w, h)
     local bm = Bytemap.newTexture({ width = w, height = h, componentCount = 4 })
-    local chars = {}
-    local chSize = w * h
-    for y = 0, h - 1 do
-        for x = 0, w - 1 do
-            local pi = y * w + x
-            local r = math.max(0, math.min(255, math.floor(tensorData[pi + 1] + 0.5)))
-            local g = math.max(0, math.min(255, math.floor(tensorData[chSize + pi + 1] + 0.5)))
-            local b = math.max(0, math.min(255, math.floor(tensorData[2 * chSize + pi + 1] + 0.5)))
-            chars[#chars + 1] = string.char(r, g, b, 255)
-        end
-    end
+    local chars, chSize = {}, w * h
+    for yy = 0, h - 1 do for xx = 0, w - 1 do
+        local pi = yy * w + xx
+        local r = math.max(0, math.min(255, math.floor(td[pi + 1] + 0.5)))
+        local g = math.max(0, math.min(255, math.floor(td[chSize + pi + 1] + 0.5)))
+        local b = math.max(0, math.min(255, math.floor(td[2 * chSize + pi + 1] + 0.5)))
+        chars[#chars + 1] = string.char(r, g, b, 255)
+    end end
     bm:SetBytes(table.concat(chars))
     return display.newImage(bm.filename, bm.baseDir), bm
 end
 
-local function runStyleTransfer(styleName)
-    styleStatus.text = "Loading " .. styleName .. "..."
+local function runStyle(name)
+    styleStatus.text = "Loading " .. name .. "..."
     styleStatus:setFillColor(0.7, 0.7, 0.3)
     timer.performWithDelay(50, function()
-        local modelPath = system.pathForFile(styleName .. ".onnx", system.ResourceDirectory)
-        if not modelPath then styleStatus.text = "Model not found"; return end
-
+        local mp = system.pathForFile(name .. ".onnx", system.ResourceDirectory)
+        if not mp then styleStatus.text = "Model not found"; return end
         if styleSession then styleSession:close(); styleSession = nil end
-        styleSession = ort.load(modelPath)
+        styleSession = ort.load(mp)
         if not styleSession then styleStatus.text = "Load failed"; return end
-
-        local inputData = imageToTensor("test_photo.png")
-        if not inputData then styleStatus.text = "Image error"; return end
-
-        styleStatus.text = "Running inference..."
+        local inp = imageToTensor("test_photo.png")
+        if not inp then styleStatus.text = "Image error"; return end
+        styleStatus.text = "Running..."
         local t0 = system.getTimer()
-        local outputs = styleSession:run({
-            input1 = { dims = {1, 3, SIZE, SIZE}, data = inputData }
-        })
-        local elapsed = system.getTimer() - t0
-        styleTime.text = string.format("%.0f ms", elapsed)
-
-        if outputs and outputs.output1 then
-            styleStatus.text = styleName:sub(1,1):upper() .. styleName:sub(2) .. " applied!"
+        local out = styleSession:run({ input1 = { dims = {1, 3, SIZE, SIZE}, data = inp } })
+        local ms = system.getTimer() - t0
+        styleTime.text = string.format("%.0f ms", ms)
+        if out and out.output1 then
+            styleStatus.text = name:sub(1,1):upper() .. name:sub(2) .. " applied!"
             styleStatus:setFillColor(0.3, 0.9, 0.5)
             if styledImage then styledImage:removeSelf() end
-            placeholderText.isVisible = false
-            local img = tensorToImage(outputs.output1.data, SIZE, SIZE)
+            slotQ.isVisible = false
+            local img = tensorToImage(out.output1.data, SIZE, SIZE)
             if img then
-                img.x = leftX + imgSize/2 + 16
-                img.y = imgY
-                img.width = imgSize
-                img.height = imgSize
-                styledImage = img
+                img.x = CX + imgW / 2 + imgGap / 2; img.y = imgY
+                img.width = imgW; img.height = imgW; styledImage = img
             end
         else
-            styleStatus.text = "Inference failed"
-            styleStatus:setFillColor(0.9, 0.3, 0.3)
+            styleStatus.text = "Failed"; styleStatus:setFillColor(0.9, 0.3, 0.3)
         end
     end)
 end
 
--- Style buttons
-local styles = { { name = "candy", color = {0.85, 0.35, 0.55} }, { name = "mosaic", color = {0.35, 0.55, 0.85} } }
-local btnW = (panelW - PAD * 3) / 2
-for i, style in ipairs(styles) do
-    local bx = leftX - panelW/2 + PAD + btnW/2 + (i - 1) * (btnW + PAD)
-    makeButton(style.name:sub(1,1):upper() .. style.name:sub(2), bx, btnY, btnW, 32,
-        style.color[1], style.color[2], style.color[3],
-        function() runStyleTransfer(style.name) end)
-end
+-- Buttons
+local bw = (CW - PAD * 2 - 40) / 2
+btn("Candy", CX - bw / 2 - 8, sBtnY, bw, 32, 0.82, 0.3, 0.5, function() runStyle("candy") end)
+btn("Mosaic", CX + bw / 2 + 8, sBtnY, bw, 32, 0.3, 0.5, 0.82, function() runStyle("mosaic") end)
 
--- ============================================================
--- TTS Section (right panel)
--- ============================================================
+-- ── TTS Section ─────────────────────────────────────────────
 
-label("Text-to-Speech", rightX, stY, 16, 0.55, 0.78, 1, true)
-label("Kitten TTS Nano (23MB ONNX model)", rightX, stY + 20, 11, 0.4)
+local ttsTop = stTop + stH + PAD
+local ttsH = CH - ttsTop - PAD
+card(ttsTop + ttsH / 2, ttsH)
+
+txt("Text-to-Speech", CX, ttsTop + 18, 15, true, 0.55, 0.78, 1)
+txt("Kitten TTS Nano · 23MB", CX, ttsTop + 36, 10, false, 0.35)
+
+-- Input box
+local ibY = ttsTop + 60
+local ib = display.newRoundedRect(CX, ibY, CW - PAD * 4, 34, 8)
+ib:setFillColor(0.08, 0.08, 0.1); ib.strokeWidth = 1; ib:setStrokeColor(0.18)
+txt("\"Hello world\"", CX, ibY, 16, true, 0.85, 0.85, 0.9)
+txt("həlˈoʊ wˈɜːld → 14 tokens", CX, ibY + 24, 9, false, 0.3)
+
+-- Speak button
+local spkY = ibY + 50
+btn("Speak", CX, spkY, CW - PAD * 4, 36, 0.88, 0.38, 0.2, nil)
+-- invisible tap target
+local spkTap = display.newRoundedRect(CX, spkY, CW - PAD * 4, 36, 18)
+spkTap:setFillColor(0, 0, 0, 0.01)
+
+local ttsStatus = txt("Tap to synthesize speech", CX, spkY + 28, 11, false, 0.4)
+local ttsTime = txt("", CX, spkY + 42, 10, false, 0.3, 0.85, 0.4)
+
+-- Waveform
+local wvW = CW - PAD * 4
+local wvH = ttsH - (spkY + 54 - ttsTop) - 12
+local wvY = spkY + 54 + wvH / 2
+local wvBg = display.newRoundedRect(CX, wvY, wvW, wvH, 6)
+wvBg:setFillColor(0.06, 0.06, 0.08); wvBg.strokeWidth = 1; wvBg:setStrokeColor(0.15)
+local wvLabel = txt("Waveform", CX, wvY, 12, false, 0.15)
+local waveGroup = display.newGroup()
+waveGroup.x = CX - wvW / 2; waveGroup.y = wvY - wvH / 2
 
 -- "Hello world" phonemized: həlˈoʊ wˈɜːld
 local ttsTokens = {50, 83, 54, 156, 57, 135, 16, 65, 156, 87, 158, 54, 46, 16}
-
--- Full voice embedding for "expr-voice-5-m" (256 floats)
 local voiceEmbedding = {
     0.0643, -0.0792, -0.2220, -0.1497, -0.3155, 0.2467, -0.1455, 0.2083,
     0.0414, 0.1680, -0.0345, -0.0507, -0.1308, 0.2285, -0.0593, 0.2741,
@@ -239,143 +225,83 @@ local voiceEmbedding = {
     0.0720, 0.1461, 0.2053, 0.0024, -0.0197, 0.2478, -0.1094, -0.2614
 }
 
--- Input display
-local inputBoxY = stY + 56
-local inputBox = roundRect(nil, rightX, inputBoxY, panelW - PAD * 2, 36, 8, 0.1, 0.1, 0.13)
-inputBox.strokeWidth = 1; inputBox:setStrokeColor(0.2)
-label("\"Hello world\"", rightX, inputBoxY, 18, 0.85, 0.85, 0.9, true)
-
--- Phoneme display
-label("həlˈoʊ wˈɜːld → 14 tokens", rightX, inputBoxY + 26, 10, 0.35)
-
--- TTS button
-local ttsBtnY = inputBoxY + 56
-makeButton("Speak", rightX, ttsBtnY, panelW - PAD * 2, 36,
-    0.9, 0.4, 0.2, nil)  -- callback set below
-
-local ttsStatus = label("Tap to synthesize speech", rightX, ttsBtnY + 32, 12, 0.45)
-local ttsTime = label("", rightX, ttsBtnY + 48, 12, 0.3, 0.9, 0.3)
-
--- Waveform display
-local waveW = panelW - PAD * 2
-local waveH = 80
-local waveY = CH - PAD - waveH / 2 - 8
-local waveBg = roundRect(nil, rightX, waveY, waveW, waveH, 6, 0.08, 0.08, 0.1)
-waveBg.strokeWidth = 1; waveBg:setStrokeColor(0.18)
-local waveLabel = label("Waveform", rightX, waveY, 13, 0.2)
-
-local waveGroup = display.newGroup()
-waveGroup.x = rightX - waveW / 2
-waveGroup.y = waveY - waveH / 2
-
--- WAV writing helpers (Lua 5.1 compatible)
+-- WAV helpers
 local function byte0(v) return v % 256 end
 local function byte1(v) return math.floor(v / 256) % 256 end
 local function byte2(v) return math.floor(v / 65536) % 256 end
 local function byte3(v) return math.floor(v / 16777216) % 256 end
+local function writeLE16(f, v) f:write(string.char(byte0(v), byte1(v))) end
+local function writeLE32(f, v) f:write(string.char(byte0(v), byte1(v), byte2(v), byte3(v))) end
 
-local function writeLE16(f, value) f:write(string.char(byte0(value), byte1(value))) end
-local function writeLE32(f, value) f:write(string.char(byte0(value), byte1(value), byte2(value), byte3(value))) end
-
-local function writeWav(filename, samples, numSamples)
-    local f = io.open(filename, "wb")
-    if not f then return false end
-    local pcmData = {}
-    for i = 1, numSamples do
-        local sample = math.max(-1.0, math.min(1.0, samples[i] or 0))
-        local pcm = math.floor(sample * 32767 + 0.5)
-        if pcm < 0 then pcm = pcm + 65536 end
-        pcmData[i] = string.char(pcm % 256, math.floor(pcm / 256) % 256)
+local function writeWav(fn, s, n)
+    local f = io.open(fn, "wb"); if not f then return false end
+    local p = {}
+    for i = 1, n do
+        local v = math.max(-1, math.min(1, s[i] or 0))
+        local c = math.floor(v * 32767 + 0.5); if c < 0 then c = c + 65536 end
+        p[i] = string.char(c % 256, math.floor(c / 256) % 256)
     end
-    local dataSize = numSamples * 2
-    f:write("RIFF"); writeLE32(f, 36 + dataSize); f:write("WAVE")
+    local ds = n * 2
+    f:write("RIFF"); writeLE32(f, 36 + ds); f:write("WAVE")
     f:write("fmt "); writeLE32(f, 16); writeLE16(f, 1); writeLE16(f, 1)
     writeLE32(f, sampleRate); writeLE32(f, sampleRate * 2); writeLE16(f, 2); writeLE16(f, 16)
-    f:write("data"); writeLE32(f, dataSize)
-    for i = 1, numSamples do f:write(pcmData[i]) end
-    f:close()
-    return true
+    f:write("data"); writeLE32(f, ds)
+    for i = 1, n do f:write(p[i]) end
+    f:close(); return true
 end
 
-local function drawWaveform(samples, numSamples)
+local function drawWaveform(samples, n)
     for i = waveGroup.numChildren, 1, -1 do waveGroup[i]:removeSelf() end
-    waveLabel.isVisible = false
-    local w, h = waveW, waveH
-    local step = math.max(1, math.floor(numSamples / w))
-    for i = 0, w - 1 do
-        local si = i * step + 1
-        local maxVal = 0
-        for j = si, math.min(si + step - 1, numSamples) do
-            local v = math.abs(samples[j] or 0)
-            if v > maxVal then maxVal = v end
+    wvLabel.isVisible = false
+    local step = math.max(1, math.floor(n / wvW))
+    for i = 0, wvW - 1 do
+        local si = i * step + 1; local mx = 0
+        for j = si, math.min(si + step - 1, n) do
+            local v = math.abs(samples[j] or 0); if v > mx then mx = v end
         end
-        local barH = maxVal * h * 0.9
-        if barH < 1 then barH = 1 end
-        local line = display.newLine(waveGroup, i, h/2 - barH/2, i, h/2 + barH/2)
-        line:setStrokeColor(0.25, 0.75, 0.4, 0.85)
-        line.strokeWidth = 1
+        local bh = mx * wvH * 0.9; if bh < 1 then bh = 1 end
+        local ln = display.newLine(waveGroup, i, wvH/2 - bh/2, i, wvH/2 + bh/2)
+        ln:setStrokeColor(0.25, 0.75, 0.4, 0.85); ln.strokeWidth = 1
     end
 end
 
 local function runTTS()
-    ttsStatus.text = "Loading model..."
-    ttsStatus:setFillColor(0.7, 0.7, 0.3)
+    ttsStatus.text = "Loading model..."; ttsStatus:setFillColor(0.7, 0.7, 0.3)
     timer.performWithDelay(50, function()
-        local modelPath = system.pathForFile("kitten_tts_nano_v0_1.onnx", system.ResourceDirectory)
-        if not modelPath then ttsStatus.text = "Model not found"; return end
-
-        local session = ort.load(modelPath)
+        local mp = system.pathForFile("kitten_tts_nano_v0_1.onnx", system.ResourceDirectory)
+        if not mp then ttsStatus.text = "Model not found"; return end
+        local session = ort.load(mp)
         if not session then ttsStatus.text = "Load failed"; return end
-
         ttsStatus.text = "Running inference..."
         local t0 = system.getTimer()
-        local outputs = session:run({
+        local out = session:run({
             input_ids = { dims = {1, #ttsTokens}, data = ttsTokens, dtype = "int64" },
             style = { dims = {1, 256}, data = voiceEmbedding },
             speed = { dims = {1}, data = {1.0} }
         })
-        local elapsed = system.getTimer() - t0
-        session:close()
-
-        if not outputs or not outputs.waveform then
-            ttsStatus.text = "Inference failed"
-            ttsStatus:setFillColor(0.9, 0.3, 0.3)
-            return
+        local ms = system.getTimer() - t0; session:close()
+        if not out or not out.waveform then
+            ttsStatus.text = "Failed"; ttsStatus:setFillColor(0.9, 0.3, 0.3); return
         end
-
-        ttsTime.text = string.format("%.0f ms  |  %d samples", elapsed, #outputs.waveform.data)
-
-        local raw = outputs.waveform.data
-        local trimStart = 5001
-        local trimEnd = #raw - 10000
-        if trimEnd <= trimStart then trimEnd = #raw end
-        local trimmed = {}
-        for i = trimStart, trimEnd do trimmed[#trimmed + 1] = raw[i] end
-
+        ttsTime.text = string.format("%.0f ms  ·  %d samples", ms, #out.waveform.data)
+        local raw = out.waveform.data
+        local ts, te = 5001, #raw - 10000; if te <= ts then te = #raw end
+        local trimmed = {}; for i = ts, te do trimmed[#trimmed + 1] = raw[i] end
         drawWaveform(trimmed, #trimmed)
-
-        local wavPath = system.pathForFile("tts_output.wav", system.TemporaryDirectory)
-        if writeWav(wavPath, trimmed, #trimmed) then
-            ttsStatus.text = "Playing audio..."
-            ttsStatus:setFillColor(0.3, 0.9, 0.5)
-            local sound = audio.loadSound("tts_output.wav", system.TemporaryDirectory)
-            if sound then
-                audio.play(sound, { onComplete = function()
+        local wp = system.pathForFile("tts_output.wav", system.TemporaryDirectory)
+        if writeWav(wp, trimmed, #trimmed) then
+            ttsStatus.text = "Playing..."; ttsStatus:setFillColor(0.3, 0.9, 0.5)
+            local snd = audio.loadSound("tts_output.wav", system.TemporaryDirectory)
+            if snd then
+                audio.play(snd, { onComplete = function()
                     ttsStatus.text = "Done — \"Hello world\""
-                    ttsStatus:setFillColor(0.3, 0.9, 0.5)
-                    audio.dispose(sound)
+                    audio.dispose(snd)
                 end })
-            else
-                ttsStatus.text = "Audio playback failed"
-                ttsStatus:setFillColor(0.9, 0.3, 0.3)
-            end
+            else ttsStatus.text = "Playback failed" end
         end
     end)
 end
 
--- Wire up TTS button (find the rounded rect we created)
-local ttsBtn = display.newRoundedRect(rightX, ttsBtnY, panelW - PAD * 2, 36, 12)
-ttsBtn:setFillColor(0, 0, 0, 0.01) -- invisible tap target over the button
-ttsBtn:addEventListener("tap", function() runTTS(); return true end)
+spkTap:addEventListener("tap", function() runTTS(); return true end)
 
 print("[Demo] ONNX Runtime Demo loaded")

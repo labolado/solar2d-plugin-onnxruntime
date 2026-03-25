@@ -3,8 +3,8 @@ local ort_base = "https://github.com/labolado/solar2d-plugin-onnxruntime/release
 
 settings = {
     orientation = {
-        default = "landscapeRight",
-        supported = { "landscapeLeft", "landscapeRight" },
+        default = "portrait",
+        supported = { "portrait" },
     },
     plugins = {
         ["plugin.onnxruntime"] = {
