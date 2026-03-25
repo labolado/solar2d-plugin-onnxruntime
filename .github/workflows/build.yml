@@ -71,6 +71,9 @@ jobs:
         run: |
           STAGING=$(mktemp -d)
           cp build/mac-sim/plugin_onnxruntime.dylib "$STAGING/"
+          # Bundle ORT dylib so users don't need brew install
+          ORT_PREFIX=$(brew --prefix onnxruntime)
+          cp "$ORT_PREFIX/lib/libonnxruntime.dylib" "$STAGING/"
           cat > "$STAGING/metadata.lua" << 'METALUA'
           local metadata =
           {
@@ -366,6 +369,8 @@ jobs:
         run: |
           STAGING=$(mktemp -d)
           cp build/win32-sim/plugin_onnxruntime.dll "$STAGING/"
+          # Bundle ORT DLL so users don't need to download separately
+          cp win32/onnxruntime-win/lib/onnxruntime.dll "$STAGING/"
           cat > "$STAGING/metadata.lua" << 'METALUA'
           local metadata =
           {

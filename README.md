@@ -151,11 +151,18 @@ lua/plugin/onnxruntime.lua    ← Lua loader
         └── win32/build.bat   → .dll
 ```
 
-Plugin binary is ~51KB. ONNX Runtime (~8-18MB per platform) is the main size cost.
+Plugin binary is ~51KB. ONNX Runtime library is bundled in every platform package — no extra dependencies needed.
+
+| Platform | Package contents |
+|----------|-----------------|
+| mac-sim | `plugin_onnxruntime.dylib` + `libonnxruntime.dylib` |
+| win32-sim | `plugin_onnxruntime.dll` + `onnxruntime.dll` |
+| iphone | `libplugin_onnxruntime.a` + `libonnxruntime.a` |
+| iphone-sim | `libplugin_onnxruntime.a` + `libonnxruntime.a` (universal) |
+| android | `libplugin_onnxruntime.so` + `libonnxruntime.so` (per ABI) |
 
 ## Known Issues
 
-- **macOS rpath**: The dylib links to Homebrew's `libonnxruntime.dylib`. For distribution, bundle ORT or fix the rpath with `install_name_tool`.
 - **Output dtype**: All outputs are currently read as float32. Int64 outputs are cast to float.
 
 ## License
