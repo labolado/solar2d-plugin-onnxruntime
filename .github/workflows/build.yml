@@ -10,14 +10,33 @@ on:
 env:
   ORT_VERSION: "1.24.3"
   PLUGIN_NAME: "plugin_onnxruntime"
-  # Solar2D tgz naming: YYYY.BUILD
-  SOLAR2D_YEAR: "2024"
-  SOLAR2D_BUILD: "0001"
 
 jobs:
+  # ── Compute version string ─────────────────────────────────
+  # Tag v2 → "2026.2", branch push → "2026.RUN_NUMBER"
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tgz_version: ${{ steps.ver.outputs.tgz_version }}
+    steps:
+      - id: ver
+        run: |
+          YEAR=$(date +%Y)
+          REF="${GITHUB_REF}"
+          if [[ "$REF" == refs/tags/v* ]]; then
+            NUM="${REF#refs/tags/v}"
+            echo "tgz_version=${YEAR}.${NUM}" >> $GITHUB_OUTPUT
+          else
+            echo "tgz_version=${YEAR}.${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+          fi
+          echo "Version: $(cat $GITHUB_OUTPUT | grep tgz_version)"
+
   # ── macOS Simulator (dylib) ────────────────────────────────
   build-mac-sim:
+    needs: version
     runs-on: macos-latest
+    env:
+      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -58,7 +77,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-mac-sim.tgz" -C "$STAGING" .
+          tar czf "build/${TGZ_VERSION}-mac-sim.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -67,7 +86,10 @@ jobs:
 
   # ── Android (arm64-v8a + armeabi-v7a) ─────────────────────
   build-android:
+    needs: version
     runs-on: ubuntu-latest
+    env:
+      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -130,7 +152,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-android.tgz" -C "$STAGING" .
+          tar czf "build/${TGZ_VERSION}-android.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -139,13 +161,15 @@ jobs:
 
   # ── iOS device (arm64 static lib) ─────────────────────────
   build-iphone:
+    needs: version
     runs-on: macos-latest
+    env:
+      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Download ORT headers
         run: |
-          # ORT C API headers are platform-independent; use the macOS release
           curl -fL -o /tmp/ort-osx.tgz \
             "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz"
           tar xzf /tmp/ort-osx.tgz -C /tmp
@@ -190,7 +214,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-iphone.tgz" -C "$STAGING" .
+          tar czf "build/${TGZ_VERSION}-iphone.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -199,7 +223,10 @@ jobs:
 
   # ── iOS Simulator (arm64 + x86_64 static lib) ─────────────
   build-iphone-sim:
+    needs: version
     runs-on: macos-latest
+    env:
+      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -229,11 +256,9 @@ jobs:
               -O2 -Wall \
               -o "build/iphone-sim/plugin_onnxruntime_sim_${ARCH}.o" \
               plugin_onnxruntime.c
-            # Create per-arch static lib
             ar rcs "build/iphone-sim/libplugin_onnxruntime_${ARCH}.a" \
               "build/iphone-sim/plugin_onnxruntime_sim_${ARCH}.o"
           done
-          # Merge into universal fat library with lipo
           lipo -create \
             build/iphone-sim/libplugin_onnxruntime_arm64.a \
             build/iphone-sim/libplugin_onnxruntime_x86_64.a \
@@ -258,7 +283,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-iphone-sim.tgz" -C "$STAGING" .
+          tar czf "build/${TGZ_VERSION}-iphone-sim.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -267,7 +292,10 @@ jobs:
 
   # ── Windows (x64 DLL) ─────────────────────────────────────
   build-win32-sim:
+    needs: version
     runs-on: windows-latest
+    env:
+      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -297,7 +325,6 @@ jobs:
         run: |
           mkdir build\lua51 2>nul
           cd /d "%LUA_INCLUDE%"
-          REM Compile core Lua sources into a static lib for linking
           cl /O2 /c /W3 /DLUA_BUILD_AS_DLL ^
             lapi.c lcode.c ldebug.c ldo.c ldump.c lfunc.c lgc.c llex.c ^
             lmem.c lobject.c lopcodes.c lparser.c lstate.c lstring.c ^
@@ -335,7 +362,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-win32-sim.tgz" -C "$STAGING" .
+          tar czf "build/${TGZ_VERSION}-win32-sim.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -345,7 +372,7 @@ jobs:
   # ── Release (on tag push v1, v2, ...) ─────────────────────
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-mac-sim, build-android, build-iphone, build-iphone-sim, build-win32-sim]
+    needs: [version, build-mac-sim, build-android, build-iphone, build-iphone-sim, build-win32-sim]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -106,18 +106,20 @@ build.bat
 Prebuilt binaries are available from [GitHub Releases](https://github.com/labolado/solar2d-plugin-onnxruntime/releases). Add to your `build.settings`:
 
 ```lua
-local onnxruntime_v1 = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v1/"
+-- Version format: YYYY.N where N matches the tag number (v2 → 2026.2)
+local onnxruntime_release = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v2/"
+local onnxruntime_ver = "2026.2"
 
 settings = {
     plugins = {
         ["plugin.onnxruntime"] = {
             publisherId = "com.labolado",
             supportedPlatforms = {
-                ["mac-sim"]     = { url = onnxruntime_v1 .. "2024.0001-mac-sim.tgz" },
-                android         = { url = onnxruntime_v1 .. "2024.0001-android.tgz" },
-                iphone          = { url = onnxruntime_v1 .. "2024.0001-iphone.tgz" },
-                ["iphone-sim"]  = { url = onnxruntime_v1 .. "2024.0001-iphone-sim.tgz" },
-                ["win32-sim"]   = { url = onnxruntime_v1 .. "2024.0001-win32-sim.tgz" },
+                ["mac-sim"]     = { url = onnxruntime_release .. onnxruntime_ver .. "-mac-sim.tgz" },
+                android         = { url = onnxruntime_release .. onnxruntime_ver .. "-android.tgz" },
+                iphone          = { url = onnxruntime_release .. onnxruntime_ver .. "-iphone.tgz" },
+                ["iphone-sim"]  = { url = onnxruntime_release .. onnxruntime_ver .. "-iphone-sim.tgz" },
+                ["win32-sim"]   = { url = onnxruntime_release .. onnxruntime_ver .. "-win32-sim.tgz" },
             },
         },
     },
