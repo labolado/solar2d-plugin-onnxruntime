@@ -229,11 +229,16 @@ jobs:
               -O2 -Wall \
               -o "build/iphone-sim/plugin_onnxruntime_sim_${ARCH}.o" \
               plugin_onnxruntime.c
+            # Create per-arch static lib
+            ar rcs "build/iphone-sim/libplugin_onnxruntime_${ARCH}.a" \
+              "build/iphone-sim/plugin_onnxruntime_sim_${ARCH}.o"
           done
-          ar rcs build/iphone-sim/libplugin_onnxruntime.a \
-            build/iphone-sim/plugin_onnxruntime_sim_arm64.o \
-            build/iphone-sim/plugin_onnxruntime_sim_x86_64.o
-          rm -f build/iphone-sim/*.o
+          # Merge into universal fat library with lipo
+          lipo -create \
+            build/iphone-sim/libplugin_onnxruntime_arm64.a \
+            build/iphone-sim/libplugin_onnxruntime_x86_64.a \
+            -output build/iphone-sim/libplugin_onnxruntime.a
+          rm -f build/iphone-sim/*.o build/iphone-sim/libplugin_onnxruntime_arm64.a build/iphone-sim/libplugin_onnxruntime_x86_64.a
           ls -lh build/iphone-sim/libplugin_onnxruntime.a
 
       - name: Package iphone-sim tgz
@@ -287,6 +292,22 @@ jobs:
 
       - uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Build Lua 5.1 lib
+        shell: cmd
+        run: |
+          mkdir build\lua51 2>nul
+          cd /d "%LUA_INCLUDE%"
+          REM Compile core Lua sources into a static lib for linking
+          cl /O2 /c /W3 /DLUA_BUILD_AS_DLL ^
+            lapi.c lcode.c ldebug.c ldo.c ldump.c lfunc.c lgc.c llex.c ^
+            lmem.c lobject.c lopcodes.c lparser.c lstate.c lstring.c ^
+            ltable.c ltm.c lundump.c lvm.c lzio.c lauxlib.c lbaselib.c ^
+            ldblib.c liolib.c lmathlib.c loslib.c ltablib.c lstrlib.c ^
+            loadlib.c linit.c
+          lib /OUT:lua51.lib *.obj
+          del *.obj
+          echo Built lua51.lib
+
       - name: Build DLL
         shell: cmd
         run: |
@@ -296,7 +317,7 @@ jobs:
             /I"%LUA_INCLUDE%" ^
             plugin_onnxruntime.c ^
             /Fe"build\win32-sim\plugin_onnxruntime.dll" ^
-            /link /LIBPATH:"win32\onnxruntime-win\lib" onnxruntime.lib
+            /link /LIBPATH:"win32\onnxruntime-win\lib" /LIBPATH:"%LUA_INCLUDE%" onnxruntime.lib lua51.lib
           dir build\win32-sim\plugin_onnxruntime.dll
 
       - name: Package win32-sim tgz
