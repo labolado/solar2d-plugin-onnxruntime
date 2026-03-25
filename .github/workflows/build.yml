@@ -59,7 +59,13 @@ jobs:
             -undefined dynamic_lookup \
             -O2 -Wall \
             plugin_onnxruntime.c
+          # Fix rpath: replace hardcoded Homebrew path with @rpath so it works on any machine
+          install_name_tool -change \
+            "$(otool -L build/mac-sim/plugin_onnxruntime.dylib | grep libonnxruntime | awk '{print $1}')" \
+            "@rpath/libonnxruntime.dylib" \
+            build/mac-sim/plugin_onnxruntime.dylib
           ls -lh build/mac-sim/plugin_onnxruntime.dylib
+          otool -L build/mac-sim/plugin_onnxruntime.dylib | grep onnx
 
       - name: Package mac-sim tgz
         run: |
