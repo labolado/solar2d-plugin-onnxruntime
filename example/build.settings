@@ -1,6 +1,3 @@
--- Change "v3" to the latest release tag
-local ort_base = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/"
-
 settings = {
     orientation = {
         default = "portrait",
@@ -10,15 +7,22 @@ settings = {
         ["plugin.onnxruntime"] = {
             publisherId = "com.labolado",
             supportedPlatforms = {
-                ["mac-sim"]     = { url = ort_base .. "plugin.onnxruntime-mac-sim.tgz" },
-                android         = { url = ort_base .. "plugin.onnxruntime-android.tgz" },
-                iphone          = { url = ort_base .. "plugin.onnxruntime-iphone.tgz" },
-                ["iphone-sim"]  = { url = ort_base .. "plugin.onnxruntime-iphone-sim.tgz" },
-                ["win32-sim"]   = { url = ort_base .. "plugin.onnxruntime-win32-sim.tgz" },
+                iphone          = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-iphone.tgz" },
+                ["iphone-sim"]  = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-iphone-sim.tgz" },
+                ["mac-sim"]     = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-mac-sim.tgz" },
+                android         = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-android.tgz" },
+                ["win32-sim"]   = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-win32-sim.tgz" },
             },
         },
         ["plugin.Bytemap"] = {
             publisherId = "com.xibalbastudios",
+            supportedPlatforms = {
+                iphone          = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-iphone.tgz" },
+                ["iphone-sim"]  = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-iphone-sim.tgz" },
+                ["mac-sim"]     = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-mac-sim.tgz" },
+                android         = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-android.tgz" },
+                ["win32-sim"]   = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-win32-sim.tgz" },
+            },
         },
     },
 }

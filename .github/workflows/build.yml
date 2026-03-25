@@ -173,12 +173,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download ORT headers
+      - name: Download ORT iOS (xcframework + headers)
         run: |
-          curl -fL -o /tmp/ort-osx.tgz \
-            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz"
-          tar xzf /tmp/ort-osx.tgz -C /tmp
-          echo "ORT_INCLUDE=/tmp/onnxruntime-osx-arm64-${ORT_VERSION}/include" >> $GITHUB_ENV
+          curl -fL -o /tmp/ort-ios-pod.zip \
+            "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-${ORT_VERSION}.zip"
+          unzip -q /tmp/ort-ios-pod.zip -d /tmp/ort-ios
+          echo "ORT_INCLUDE=/tmp/ort-ios/Headers" >> $GITHUB_ENV
+          echo "ORT_XCFW=/tmp/ort-ios/onnxruntime.xcframework" >> $GITHUB_ENV
 
       - name: Download Lua 5.1 headers
         run: |
@@ -207,13 +208,15 @@ jobs:
         run: |
           STAGING=$(mktemp -d)
           cp build/iphone/libplugin_onnxruntime.a "$STAGING/"
+          # Bundle ORT static lib so users don't need to download it separately
+          cp "$ORT_XCFW/ios-arm64/onnxruntime.framework/onnxruntime" "$STAGING/libonnxruntime.a"
           cat > "$STAGING/metadata.lua" << 'METALUA'
           local metadata =
           {
             plugin =
             {
               format = 'staticLibrary',
-              staticLibs = { 'plugin_onnxruntime', },
+              staticLibs = { 'plugin_onnxruntime', 'onnxruntime' },
               frameworks = {},
               frameworksOptional = {},
             },
@@ -236,12 +239,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download ORT headers
+      - name: Download ORT iOS (xcframework + headers)
         run: |
-          curl -fL -o /tmp/ort-osx.tgz \
-            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz"
-          tar xzf /tmp/ort-osx.tgz -C /tmp
-          echo "ORT_INCLUDE=/tmp/onnxruntime-osx-arm64-${ORT_VERSION}/include" >> $GITHUB_ENV
+          curl -fL -o /tmp/ort-ios-pod.zip \
+            "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-${ORT_VERSION}.zip"
+          unzip -q /tmp/ort-ios-pod.zip -d /tmp/ort-ios
+          echo "ORT_INCLUDE=/tmp/ort-ios/Headers" >> $GITHUB_ENV
+          echo "ORT_XCFW=/tmp/ort-ios/onnxruntime.xcframework" >> $GITHUB_ENV
 
       - name: Download Lua 5.1 headers
         run: |
@@ -277,13 +281,15 @@ jobs:
         run: |
           STAGING=$(mktemp -d)
           cp build/iphone-sim/libplugin_onnxruntime.a "$STAGING/"
+          # Bundle ORT simulator static lib
+          cp "$ORT_XCFW/ios-arm64_x86_64-simulator/onnxruntime.framework/onnxruntime" "$STAGING/libonnxruntime.a"
           cat > "$STAGING/metadata.lua" << 'METALUA'
           local metadata =
           {
             plugin =
             {
               format = 'staticLibrary',
-              staticLibs = { 'plugin_onnxruntime', },
+              staticLibs = { 'plugin_onnxruntime', 'onnxruntime' },
               frameworks = {},
               frameworksOptional = {},
             },
