@@ -31,6 +31,12 @@
   #define lua_objlen(L,i) lua_rawlen(L,i)
 #endif
 
+/* ── Version ─────────────────────────────────────────────── */
+
+#ifndef PLUGIN_VERSION
+#define PLUGIN_VERSION "dev"
+#endif
+
 /* ── Globals ─────────────────────────────────────────────── */
 
 static const OrtApi *g_ort = NULL;
@@ -437,8 +443,14 @@ static const luaL_Reg kSessionMethods[] = {
     { NULL, NULL }
 };
 
+static int ort_version(lua_State *L) {
+    lua_pushstring(L, PLUGIN_VERSION);
+    return 1;
+}
+
 static const luaL_Reg kModuleFunctions[] = {
     { "load", ort_load },
+    { "version", ort_version },
     { NULL, NULL }
 };
 
@@ -456,5 +468,10 @@ int luaopen_plugin_onnxruntime(lua_State *L) {
 
     /* Register module functions */
     luaL_register(L, "plugin.onnxruntime", kModuleFunctions);
+
+    /* ort.VERSION = "v2" */
+    lua_pushstring(L, PLUGIN_VERSION);
+    lua_setfield(L, -2, "VERSION");
+
     return 1;
 }

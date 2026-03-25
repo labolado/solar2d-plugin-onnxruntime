@@ -57,6 +57,10 @@ Returns `nil, error_message` on failure.
 
 Release the session. Also called automatically on GC.
 
+### `ort.version()` / `ort.VERSION`
+
+Returns the plugin version string (e.g. `"v2"`).
+
 ## Build
 
 ### Prerequisites
@@ -106,20 +110,19 @@ build.bat
 Prebuilt binaries are available from [GitHub Releases](https://github.com/labolado/solar2d-plugin-onnxruntime/releases). Add to your `build.settings`:
 
 ```lua
--- Version format: YYYY.N where N matches the tag number (v2 → 2026.2)
-local onnxruntime_release = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v2/"
-local onnxruntime_ver = "2026.2"
+-- Change "v2" to the latest release tag
+local ort_base = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v2/"
 
 settings = {
     plugins = {
         ["plugin.onnxruntime"] = {
             publisherId = "com.labolado",
             supportedPlatforms = {
-                ["mac-sim"]     = { url = onnxruntime_release .. onnxruntime_ver .. "-mac-sim.tgz" },
-                android         = { url = onnxruntime_release .. onnxruntime_ver .. "-android.tgz" },
-                iphone          = { url = onnxruntime_release .. onnxruntime_ver .. "-iphone.tgz" },
-                ["iphone-sim"]  = { url = onnxruntime_release .. onnxruntime_ver .. "-iphone-sim.tgz" },
-                ["win32-sim"]   = { url = onnxruntime_release .. onnxruntime_ver .. "-win32-sim.tgz" },
+                ["mac-sim"]     = { url = ort_base .. "plugin.onnxruntime-mac-sim.tgz" },
+                android         = { url = ort_base .. "plugin.onnxruntime-android.tgz" },
+                iphone          = { url = ort_base .. "plugin.onnxruntime-iphone.tgz" },
+                ["iphone-sim"]  = { url = ort_base .. "plugin.onnxruntime-iphone-sim.tgz" },
+                ["win32-sim"]   = { url = ort_base .. "plugin.onnxruntime-win32-sim.tgz" },
             },
         },
     },

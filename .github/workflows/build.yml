@@ -9,34 +9,31 @@ on:
 
 env:
   ORT_VERSION: "1.24.3"
-  PLUGIN_NAME: "plugin_onnxruntime"
 
 jobs:
   # ── Compute version string ─────────────────────────────────
-  # Tag v2 → "2026.2", branch push → "2026.RUN_NUMBER"
   version:
     runs-on: ubuntu-latest
     outputs:
-      tgz_version: ${{ steps.ver.outputs.tgz_version }}
+      plugin_version: ${{ steps.ver.outputs.plugin_version }}
     steps:
       - id: ver
         run: |
-          YEAR=$(date +%Y)
           REF="${GITHUB_REF}"
           if [[ "$REF" == refs/tags/v* ]]; then
-            NUM="${REF#refs/tags/v}"
-            echo "tgz_version=${YEAR}.${NUM}" >> $GITHUB_OUTPUT
+            VER="${REF#refs/tags/}"
           else
-            echo "tgz_version=${YEAR}.${GITHUB_RUN_NUMBER}" >> $GITHUB_OUTPUT
+            VER="dev-${GITHUB_RUN_NUMBER}"
           fi
-          echo "Version: $(cat $GITHUB_OUTPUT | grep tgz_version)"
+          echo "plugin_version=${VER}" >> $GITHUB_OUTPUT
+          echo "Plugin version: ${VER}"
 
   # ── macOS Simulator (dylib) ────────────────────────────────
   build-mac-sim:
     needs: version
     runs-on: macos-latest
     env:
-      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
+      PLUGIN_VERSION: ${{ needs.version.outputs.plugin_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +51,7 @@ jobs:
           mkdir -p build/mac-sim
           ORT_PREFIX=$(brew --prefix onnxruntime)
           clang -shared -o build/mac-sim/plugin_onnxruntime.dylib \
+            -DPLUGIN_VERSION="\"${PLUGIN_VERSION}\"" \
             -I"$LUA_INCLUDE" \
             -I"$ORT_PREFIX/include/onnxruntime" \
             -L"$ORT_PREFIX/lib" \
@@ -77,7 +75,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${TGZ_VERSION}-mac-sim.tgz" -C "$STAGING" .
+          tar czf "build/plugin.onnxruntime-mac-sim.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -89,7 +87,7 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     env:
-      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
+      PLUGIN_VERSION: ${{ needs.version.outputs.plugin_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -121,6 +119,7 @@ jobs:
             mkdir -p "$ABI_OUT"
 
             $CC -c -fPIC -O2 -Wall \
+              -DPLUGIN_VERSION="\"${PLUGIN_VERSION}\"" \
               -I"$ORT_DIR/headers" \
               -I"$LUA_INCLUDE" \
               -o "$ABI_OUT/plugin_onnxruntime.o" \
@@ -152,7 +151,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${TGZ_VERSION}-android.tgz" -C "$STAGING" .
+          tar czf "build/plugin.onnxruntime-android.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -164,7 +163,7 @@ jobs:
     needs: version
     runs-on: macos-latest
     env:
-      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
+      PLUGIN_VERSION: ${{ needs.version.outputs.plugin_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -188,6 +187,7 @@ jobs:
             -arch arm64 \
             -isysroot "$(xcrun -sdk iphoneos --show-sdk-path)" \
             -miphoneos-version-min=13.0 \
+            -DPLUGIN_VERSION="\"${PLUGIN_VERSION}\"" \
             -I"$ORT_INCLUDE" \
             -I"$LUA_INCLUDE" \
             -O2 -Wall \
@@ -214,7 +214,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${TGZ_VERSION}-iphone.tgz" -C "$STAGING" .
+          tar czf "build/plugin.onnxruntime-iphone.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -226,7 +226,7 @@ jobs:
     needs: version
     runs-on: macos-latest
     env:
-      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
+      PLUGIN_VERSION: ${{ needs.version.outputs.plugin_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -251,6 +251,7 @@ jobs:
               -arch "$ARCH" \
               -isysroot "$(xcrun -sdk iphonesimulator --show-sdk-path)" \
               -mios-simulator-version-min=13.0 \
+              -DPLUGIN_VERSION="\"${PLUGIN_VERSION}\"" \
               -I"$ORT_INCLUDE" \
               -I"$LUA_INCLUDE" \
               -O2 -Wall \
@@ -283,7 +284,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${TGZ_VERSION}-iphone-sim.tgz" -C "$STAGING" .
+          tar czf "build/plugin.onnxruntime-iphone-sim.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
@@ -295,7 +296,7 @@ jobs:
     needs: version
     runs-on: windows-latest
     env:
-      TGZ_VERSION: ${{ needs.version.outputs.tgz_version }}
+      PLUGIN_VERSION: ${{ needs.version.outputs.plugin_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -340,6 +341,7 @@ jobs:
         run: |
           mkdir build\win32-sim 2>nul
           cl /O2 /LD /W3 ^
+            /DPLUGIN_VERSION="\"%PLUGIN_VERSION%\"" ^
             /I"win32\onnxruntime-win\include" ^
             /I"%LUA_INCLUDE%" ^
             plugin_onnxruntime.c ^
@@ -362,7 +364,7 @@ jobs:
           }
           return metadata
           METALUA
-          tar czf "build/${TGZ_VERSION}-win32-sim.tgz" -C "$STAGING" .
+          tar czf "build/plugin.onnxruntime-win32-sim.tgz" -C "$STAGING" .
 
       - uses: actions/upload-artifact@v4
         with:
