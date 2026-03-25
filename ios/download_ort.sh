@@ -2,7 +2,7 @@
 # Download ONNX Runtime iOS (xcframework with CoreML EP)
 set -euo pipefail
 
-ORT_VERSION="1.24.0"
+ORT_VERSION="1.24.3"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUT_DIR="$SCRIPT_DIR/onnxruntime-ios"
 

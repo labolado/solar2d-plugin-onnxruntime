@@ -1,5 +1,5 @@
 # Download ONNX Runtime Windows prebuilt libraries
-$ORT_VERSION = "1.24.0"
+$ORT_VERSION = "1.24.3"
 $OUT_DIR = "$PSScriptRoot\onnxruntime-win"
 
 if (Test-Path "$OUT_DIR\lib\onnxruntime.lib") {

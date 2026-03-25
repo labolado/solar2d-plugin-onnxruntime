@@ -8,7 +8,7 @@ on:
     branches: [master]
 
 env:
-  ORT_VERSION: "1.24.0"
+  ORT_VERSION: "1.24.3"
   PLUGIN_NAME: "plugin_onnxruntime"
   # Solar2D tgz naming: YYYY.BUILD
   SOLAR2D_YEAR: "2024"
@@ -143,34 +143,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download ONNX Runtime iOS
-        run: cd ios && bash download_ort.sh
+      - name: Download ORT headers
+        run: |
+          # ORT C API headers are platform-independent; use the macOS release
+          curl -fL -o /tmp/ort-osx.tgz \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz"
+          tar xzf /tmp/ort-osx.tgz -C /tmp
+          echo "ORT_INCLUDE=/tmp/onnxruntime-osx-arm64-${ORT_VERSION}/include" >> $GITHUB_ENV
 
       - name: Download Lua 5.1 headers
         run: |
           curl -fL -o /tmp/lua-5.1.5.tar.gz https://www.lua.org/ftp/lua-5.1.5.tar.gz
           tar xzf /tmp/lua-5.1.5.tar.gz -C /tmp
           echo "LUA_INCLUDE=/tmp/lua-5.1.5/src" >> $GITHUB_ENV
-
-      - name: Find ORT headers
-        run: |
-          ORT_DIR="$PWD/ios/onnxruntime-ios"
-          for dir in "$ORT_DIR/Headers" "$ORT_DIR/onnxruntime.xcframework/ios-arm64/onnxruntime.framework/Headers"; do
-            if [ -f "$dir/onnxruntime_c_api.h" ]; then
-              echo "ORT_INCLUDE=$dir" >> $GITHUB_ENV
-              break
-            fi
-          done
-          if [ -z "${ORT_INCLUDE:-}" ]; then
-            FOUND=$(find "$ORT_DIR" -name "onnxruntime_c_api.h" -print -quit 2>/dev/null || true)
-            if [ -n "$FOUND" ]; then
-              echo "ORT_INCLUDE=$(dirname "$FOUND")" >> $GITHUB_ENV
-            else
-              echo "ERROR: onnxruntime_c_api.h not found in $ORT_DIR"
-              find "$ORT_DIR" -type f | head -30
-              exit 1
-            fi
-          fi
 
       - name: Build iOS device (arm64)
         run: |
@@ -218,33 +203,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download ONNX Runtime iOS
-        run: cd ios && bash download_ort.sh
+      - name: Download ORT headers
+        run: |
+          curl -fL -o /tmp/ort-osx.tgz \
+            "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz"
+          tar xzf /tmp/ort-osx.tgz -C /tmp
+          echo "ORT_INCLUDE=/tmp/onnxruntime-osx-arm64-${ORT_VERSION}/include" >> $GITHUB_ENV
 
       - name: Download Lua 5.1 headers
         run: |
           curl -fL -o /tmp/lua-5.1.5.tar.gz https://www.lua.org/ftp/lua-5.1.5.tar.gz
           tar xzf /tmp/lua-5.1.5.tar.gz -C /tmp
           echo "LUA_INCLUDE=/tmp/lua-5.1.5/src" >> $GITHUB_ENV
-
-      - name: Find ORT headers
-        run: |
-          ORT_DIR="$PWD/ios/onnxruntime-ios"
-          for dir in "$ORT_DIR/Headers" "$ORT_DIR/onnxruntime.xcframework/ios-arm64/onnxruntime.framework/Headers"; do
-            if [ -f "$dir/onnxruntime_c_api.h" ]; then
-              echo "ORT_INCLUDE=$dir" >> $GITHUB_ENV
-              break
-            fi
-          done
-          if [ -z "${ORT_INCLUDE:-}" ]; then
-            FOUND=$(find "$ORT_DIR" -name "onnxruntime_c_api.h" -print -quit 2>/dev/null || true)
-            if [ -n "$FOUND" ]; then
-              echo "ORT_INCLUDE=$(dirname "$FOUND")" >> $GITHUB_ENV
-            else
-              echo "ERROR: onnxruntime_c_api.h not found"
-              exit 1
-            fi
-          fi
 
       - name: Build iOS simulator (arm64 + x86_64)
         run: |
