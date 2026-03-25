@@ -50,15 +50,13 @@ done
 if [ -z "$LUA_INCLUDE" ]; then echo "ERROR: lua.h not found"; exit 1; fi
 
 # Build for each ABI using direct clang (Lua symbols resolved at runtime by Solar2D)
-declare -A ABI_CC=(
-    ["arm64-v8a"]="aarch64-linux-android24-clang"
-    ["armeabi-v7a"]="armv7a-linux-androideabi24-clang"
-)
-
 for ABI in arm64-v8a armeabi-v7a; do
     echo ""
     echo "=== Building for $ABI ==="
-    CC="$TOOLCHAIN/bin/${ABI_CC[$ABI]}"
+    case "$ABI" in
+        arm64-v8a)   CC="$TOOLCHAIN/bin/aarch64-linux-android24-clang" ;;
+        armeabi-v7a) CC="$TOOLCHAIN/bin/armv7a-linux-androideabi24-clang" ;;
+    esac
     ABI_OUT="$OUT_DIR/$ABI"
     mkdir -p "$ABI_OUT"
 

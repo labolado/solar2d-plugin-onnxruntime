@@ -147,9 +147,9 @@ jobs:
       - name: Package android tgz
         run: |
           STAGING=$(mktemp -d)
-          mkdir -p "$STAGING/jni/arm64-v8a" "$STAGING/jni/armeabi-v7a"
-          cp build/android/arm64-v8a/*.so "$STAGING/jni/arm64-v8a/"
-          cp build/android/armeabi-v7a/*.so "$STAGING/jni/armeabi-v7a/"
+          mkdir -p "$STAGING/jniLibs/arm64-v8a" "$STAGING/jniLibs/armeabi-v7a"
+          cp build/android/arm64-v8a/*.so "$STAGING/jniLibs/arm64-v8a/"
+          cp build/android/armeabi-v7a/*.so "$STAGING/jniLibs/armeabi-v7a/"
           cat > "$STAGING/metadata.lua" << 'METALUA'
           local metadata =
           {
