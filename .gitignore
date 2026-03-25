@@ -1,0 +1,30 @@
+# Build output
+build/
+mac/build/
+ios/build/
+win32/build/
+*.dylib
+*.so
+*.dll
+*.a
+*.o
+*.obj
+
+# Downloaded ONNX Runtime libraries (large binaries, use download scripts)
+android/onnxruntime-android/
+ios/onnxruntime-ios/
+win32/onnxruntime-win/
+
+# CMake
+android/build/cmake-*/
+CMakeCache.txt
+CMakeFiles/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
