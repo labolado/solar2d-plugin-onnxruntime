@@ -35,7 +35,12 @@
 
 /* Platform-specific EP headers */
 #if defined(__APPLE__)
-  #include "coreml_provider_factory.h"
+  #if __has_include("coreml_provider_factory.h")
+    #include "coreml_provider_factory.h"
+    #define HAS_COREML_EP 1
+  #else
+    #define HAS_COREML_EP 0
+  #endif
 #endif
 #if defined(_WIN32)
   #include <windows.h>
@@ -187,7 +192,7 @@ static int ort_load(lua_State *L) {
 
     /* Append execution provider */
     if (ep_name) {
-#if defined(__APPLE__)
+#if defined(__APPLE__) && HAS_COREML_EP
         if (strcmp(ep_name, "coreml") == 0) {
             uint32_t coreml_flags = COREML_FLAG_ENABLE_ON_SUBGRAPH;
             OrtStatus *ep_s = OrtSessionOptionsAppendExecutionProvider_CoreML(ud->options, coreml_flags);
