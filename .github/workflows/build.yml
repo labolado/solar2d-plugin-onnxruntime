@@ -179,7 +179,7 @@ jobs:
       - name: Download ORT iOS (xcframework + headers)
         run: |
           curl -fL -o /tmp/ort-ios-pod.zip \
-            "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-${ORT_VERSION}.zip"
+            "https://download.onnxruntime.ai/pod-archive-onnxruntime-c-${ORT_VERSION}.zip"
           unzip -q /tmp/ort-ios-pod.zip -d /tmp/ort-ios
           echo "ORT_INCLUDE=/tmp/ort-ios/Headers" >> $GITHUB_ENV
           echo "ORT_XCFW=/tmp/ort-ios/onnxruntime.xcframework" >> $GITHUB_ENV
@@ -245,7 +245,7 @@ jobs:
       - name: Download ORT iOS (xcframework + headers)
         run: |
           curl -fL -o /tmp/ort-ios-pod.zip \
-            "https://onnxruntimepackages.z14.web.core.windows.net/pod-archive-onnxruntime-c-${ORT_VERSION}.zip"
+            "https://download.onnxruntime.ai/pod-archive-onnxruntime-c-${ORT_VERSION}.zip"
           unzip -q /tmp/ort-ios-pod.zip -d /tmp/ort-ios
           echo "ORT_INCLUDE=/tmp/ort-ios/Headers" >> $GITHUB_ENV
           echo "ORT_XCFW=/tmp/ort-ios/onnxruntime.xcframework" >> $GITHUB_ENV

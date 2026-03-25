@@ -152,7 +152,8 @@ static int ort_load(lua_State *L) {
 
     /* Session options */
     ORT_CHECK(g_ort->CreateSessionOptions(&ud->options));
-    ORT_CHECK(g_ort->SetIntraOpNumThreads(ud->options, 1));
+    ORT_CHECK(g_ort->SetIntraOpNumThreads(ud->options, 4));
+    ORT_CHECK(g_ort->SetSessionGraphOptimizationLevel(ud->options, ORT_ENABLE_ALL));
 
     /* Create session */
     ORT_CHECK(g_ort->CreateSession(g_env, path, ud->options, &ud->session));
