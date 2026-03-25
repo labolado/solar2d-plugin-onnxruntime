@@ -2,13 +2,26 @@
  * plugin.onnxruntime — Solar2D native plugin for ONNX Runtime inference.
  *
  * Provides a general-purpose ONNX model loader and runner.
- * Works on macOS, iOS, Android.
+ * Works on macOS, iOS, Android, Windows.
  *
  * Lua API:
  *   local ort = require("plugin.onnxruntime")
- *   local session = ort.load(modelPath)
+ *   local session = ort.load(modelPath [, opts])
  *   local outputs = session:run({ inputName = {dims={...}, data={...}} })
  *   session:close()
+ *
+ * opts table (optional):
+ *   ep = "coreml"    -- use CoreML EP (iOS/macOS)
+ *   ep = "directml"  -- use DirectML EP (Windows)
+ *   ep = "cpu"       -- default CPU EP
+ *
+ * Input data can be:
+ *   - Lua table of numbers (original API)
+ *   - Binary string of floats/int64s (set binary=true)
+ *
+ * Output data includes:
+ *   - data = { ... }          (Lua table, always present)
+ *   - data_binary = "..."     (raw float bytes, for large tensors)
  */
 
 #include <stdlib.h>
@@ -20,12 +33,19 @@
 #include "lualib.h"
 #include "onnxruntime_c_api.h"
 
+/* Platform-specific EP headers */
+#if defined(__APPLE__)
+  #include "coreml_provider_factory.h"
+#endif
+#if defined(_WIN32)
+  #include <windows.h>
+  typedef OrtStatusPtr (ORT_API_CALL *PFN_OrtSessionOptionsAppendExecutionProvider_DML)(
+      OrtSessionOptions* options, int device_id);
+#endif
+
 /* ── Lua 5.1 / 5.2+ compat ───────────────────────────────
  * Solar2D uses Lua 5.1. When compiled against 5.2+ headers,
  * map newer API names back to their 5.1 equivalents.
- * NOTE: Always prefer Solar2D's own Lua headers from
- *   Corona-b3/Native/Corona/shared/include/lua/
- * to avoid ABI mismatches.
  * ─────────────────────────────────────────────────────────── */
 #if LUA_VERSION_NUM >= 502
   #define lua_objlen(L,i) lua_rawlen(L,i)
@@ -132,7 +152,7 @@ static int table_to_dims(lua_State *L, int idx, int64_t **out, size_t *ndims) {
     return 0;
 }
 
-/* ── ort.load(modelPath) → session userdata ──────────── */
+/* ── ort.load(modelPath [, opts]) → session userdata ──── */
 
 static int ort_load(lua_State *L) {
     const char *path = luaL_checkstring(L, 1);
@@ -154,6 +174,51 @@ static int ort_load(lua_State *L) {
     ORT_CHECK(g_ort->CreateSessionOptions(&ud->options));
     ORT_CHECK(g_ort->SetIntraOpNumThreads(ud->options, 1));
     ORT_CHECK(g_ort->SetSessionGraphOptimizationLevel(ud->options, ORT_ENABLE_ALL));
+
+    /* Parse opts table (arg 2) */
+    const char *ep_name = NULL;
+    if (lua_istable(L, 2)) {
+        lua_getfield(L, 2, "ep");
+        if (lua_isstring(L, -1)) {
+            ep_name = lua_tostring(L, -1);
+        }
+        lua_pop(L, 1);
+    }
+
+    /* Append execution provider */
+    if (ep_name) {
+#if defined(__APPLE__)
+        if (strcmp(ep_name, "coreml") == 0) {
+            uint32_t coreml_flags = COREML_FLAG_ENABLE_ON_SUBGRAPH;
+            OrtStatus *ep_s = OrtSessionOptionsAppendExecutionProvider_CoreML(ud->options, coreml_flags);
+            if (ep_s) {
+                fprintf(stderr, "[ort] CoreML EP failed: %s (falling back to CPU)\n",
+                        g_ort->GetErrorMessage(ep_s));
+                g_ort->ReleaseStatus(ep_s);
+            }
+        }
+#endif
+#if defined(_WIN32)
+        if (strcmp(ep_name, "directml") == 0) {
+            HMODULE ort_dll = GetModuleHandleA("onnxruntime.dll");
+            if (ort_dll) {
+                PFN_OrtSessionOptionsAppendExecutionProvider_DML pfn =
+                    (PFN_OrtSessionOptionsAppendExecutionProvider_DML)
+                    GetProcAddress(ort_dll, "OrtSessionOptionsAppendExecutionProvider_DML");
+                if (pfn) {
+                    OrtStatus *ep_s = pfn(ud->options, 0);
+                    if (ep_s) {
+                        fprintf(stderr, "[ort] DirectML EP failed: %s (falling back to CPU)\n",
+                                g_ort->GetErrorMessage(ep_s));
+                        g_ort->ReleaseStatus(ep_s);
+                    }
+                } else {
+                    fprintf(stderr, "[ort] DirectML EP not available in this ORT build\n");
+                }
+            }
+        }
+#endif
+    }
 
     /* Create session */
     ORT_CHECK(g_ort->CreateSession(g_env, path, ud->options, &ud->session));
@@ -201,7 +266,7 @@ static int session_run(lua_State *L) {
     const char **in_names = (const char **)ud->input_names;
     OrtValue **in_values = (OrtValue **)calloc(n_in, sizeof(OrtValue *));
     void **in_bufs = (void **)calloc(n_in, sizeof(void *)); /* track for cleanup */
-    ONNXTensorElementDataType *in_dtypes = (ONNXTensorElementDataType *)calloc(n_in, sizeof(ONNXTensorElementDataType));
+    int *in_buf_owned = (int *)calloc(n_in, sizeof(int)); /* whether we need to free */
 
     for (size_t i = 0; i < n_in; i++) {
         lua_getfield(L, 2, ud->input_names[i]);
@@ -209,9 +274,9 @@ static int session_run(lua_State *L) {
             /* Free already-created tensors */
             for (size_t j = 0; j < i; j++) {
                 g_ort->ReleaseValue(in_values[j]);
-                free(in_bufs[j]);
+                if (in_buf_owned[j]) free(in_bufs[j]);
             }
-            free(in_values); free(in_bufs); free(in_dtypes);
+            free(in_values); free(in_bufs); free(in_buf_owned);
             g_ort->ReleaseMemoryInfo(mem_info);
             return luaL_error(L, "missing input: %s", ud->input_names[i]);
         }
@@ -233,24 +298,39 @@ static int session_run(lua_State *L) {
             }
         }
         lua_pop(L, 1);
-        in_dtypes[i] = dtype;
 
-        /* Read data based on dtype */
+        /* Check if binary mode */
+        int is_binary = 0;
+        lua_getfield(L, -1, "binary");
+        if (lua_toboolean(L, -1)) is_binary = 1;
+        lua_pop(L, 1);
+
+        /* Read data */
         void *data = NULL;
         size_t count = 0;
-        size_t elem_size = sizeof(float);
-        
+        size_t elem_size = (dtype == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) ? sizeof(int64_t) : sizeof(float);
+
         lua_getfield(L, -1, "data");
-        if (dtype == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+
+        if (is_binary && lua_isstring(L, -1)) {
+            /* Binary string path — zero-copy, no per-element Lua calls */
+            size_t str_len = 0;
+            const char *str_data = lua_tolstring(L, -1, &str_len);
+            count = str_len / elem_size;
+            /* Must copy because Lua may GC the string */
+            data = malloc(str_len);
+            memcpy(data, str_data, str_len);
+            in_buf_owned[i] = 1;
+        } else if (dtype == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
             int64_t *int64_data = NULL;
             table_to_int64s(L, -1, &int64_data, &count);
             data = int64_data;
-            elem_size = sizeof(int64_t);
+            in_buf_owned[i] = 1;
         } else {
             float *float_data = NULL;
             table_to_floats(L, -1, &float_data, &count);
             data = float_data;
-            elem_size = sizeof(float);
+            in_buf_owned[i] = 1;
         }
         lua_pop(L, 1);
 
@@ -269,9 +349,9 @@ static int session_run(lua_State *L) {
             const char *msg = g_ort->GetErrorMessage(s);
             for (size_t j = 0; j <= i; j++) {
                 if (in_values[j]) g_ort->ReleaseValue(in_values[j]);
-                free(in_bufs[j]);
+                if (in_buf_owned[j]) free(in_bufs[j]);
             }
-            free(in_values); free(in_bufs); free(in_dtypes);
+            free(in_values); free(in_bufs); free(in_buf_owned);
             g_ort->ReleaseMemoryInfo(mem_info);
             lua_pushnil(L);
             lua_pushstring(L, msg);
@@ -293,11 +373,11 @@ static int session_run(lua_State *L) {
     /* Cleanup inputs */
     for (size_t i = 0; i < n_in; i++) {
         g_ort->ReleaseValue(in_values[i]);
-        free(in_bufs[i]);
+        if (in_buf_owned[i]) free(in_bufs[i]);
     }
     free(in_values);
     free(in_bufs);
-    free(in_dtypes);
+    free(in_buf_owned);
     g_ort->ReleaseMemoryInfo(mem_info);
 
     if (run_status) {
@@ -332,7 +412,7 @@ static int session_run(lua_State *L) {
         float *out_data = NULL;
         g_ort->GetTensorMutableData(out_values[i], (void **)&out_data);
 
-        /* Create output entry: { dims={...}, data={...} } */
+        /* Create output entry: { dims={...}, data={...}, data_binary="..." } */
         lua_pushstring(L, ud->output_names[i]);
         lua_newtable(L);
 
@@ -345,7 +425,7 @@ static int session_run(lua_State *L) {
         }
         lua_settable(L, -3);
 
-        /* data */
+        /* data (Lua table — always provided for compatibility) */
         lua_pushstring(L, "data");
         lua_newtable(L);
         for (size_t e = 0; e < elem_count; e++) {
@@ -354,7 +434,12 @@ static int session_run(lua_State *L) {
         }
         lua_settable(L, -3);
 
-        lua_settable(L, -3); /* outputs[name] = {dims, data} */
+        /* data_binary (raw float bytes — fast path for large tensors) */
+        lua_pushstring(L, "data_binary");
+        lua_pushlstring(L, (const char *)out_data, elem_count * sizeof(float));
+        lua_settable(L, -3);
+
+        lua_settable(L, -3); /* outputs[name] = {dims, data, data_binary} */
 
         free(out_dims);
         g_ort->ReleaseValue(out_values[i]);
@@ -470,7 +555,7 @@ int luaopen_plugin_onnxruntime(lua_State *L) {
     /* Register module functions */
     luaL_register(L, "plugin.onnxruntime", kModuleFunctions);
 
-    /* ort.VERSION = "v2" */
+    /* ort.VERSION */
     lua_pushstring(L, PLUGIN_VERSION);
     lua_setfield(L, -2, "VERSION");
 

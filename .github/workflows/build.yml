@@ -220,7 +220,7 @@ jobs:
             {
               format = 'staticLibrary',
               staticLibs = { 'plugin_onnxruntime', 'onnxruntime' },
-              frameworks = {},
+              frameworks = { 'CoreML', 'Foundation' },
               frameworksOptional = {},
             },
           }
@@ -293,7 +293,7 @@ jobs:
             {
               format = 'staticLibrary',
               staticLibs = { 'plugin_onnxruntime', 'onnxruntime' },
-              frameworks = {},
+              frameworks = { 'CoreML', 'Foundation' },
               frameworksOptional = {},
             },
           }
