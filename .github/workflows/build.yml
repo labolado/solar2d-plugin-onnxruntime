@@ -1,0 +1,378 @@
+name: Build All Platforms
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+
+env:
+  ORT_VERSION: "1.24.0"
+  PLUGIN_NAME: "plugin_onnxruntime"
+  # Solar2D tgz naming: YYYY.BUILD
+  SOLAR2D_YEAR: "2024"
+  SOLAR2D_BUILD: "0001"
+
+jobs:
+  # ── macOS Simulator (dylib) ────────────────────────────────
+  build-mac-sim:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ONNX Runtime
+        run: brew install onnxruntime
+
+      - name: Download Lua 5.1 headers
+        run: |
+          curl -fL -o /tmp/lua-5.1.5.tar.gz https://www.lua.org/ftp/lua-5.1.5.tar.gz
+          tar xzf /tmp/lua-5.1.5.tar.gz -C /tmp
+          echo "LUA_INCLUDE=/tmp/lua-5.1.5/src" >> $GITHUB_ENV
+
+      - name: Build dylib
+        run: |
+          mkdir -p build/mac-sim
+          ORT_PREFIX=$(brew --prefix onnxruntime)
+          clang -shared -o build/mac-sim/plugin_onnxruntime.dylib \
+            -I"$LUA_INCLUDE" \
+            -I"$ORT_PREFIX/include/onnxruntime" \
+            -L"$ORT_PREFIX/lib" \
+            -lonnxruntime \
+            -undefined dynamic_lookup \
+            -O2 -Wall \
+            plugin_onnxruntime.c
+          ls -lh build/mac-sim/plugin_onnxruntime.dylib
+
+      - name: Package mac-sim tgz
+        run: |
+          STAGING=$(mktemp -d)
+          cp build/mac-sim/plugin_onnxruntime.dylib "$STAGING/"
+          cat > "$STAGING/metadata.lua" << 'METALUA'
+          local metadata =
+          {
+            plugin =
+            {
+              format = 'sharedLibrary',
+            },
+          }
+          return metadata
+          METALUA
+          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-mac-sim.tgz" -C "$STAGING" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-sim
+          path: build/*.tgz
+
+  # ── Android (arm64-v8a + armeabi-v7a) ─────────────────────
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ONNX Runtime Android
+        run: cd android && bash download_ort.sh
+
+      - name: Download Lua 5.1 headers
+        run: |
+          curl -fL -o /tmp/lua-5.1.5.tar.gz https://www.lua.org/ftp/lua-5.1.5.tar.gz
+          tar xzf /tmp/lua-5.1.5.tar.gz -C /tmp
+
+      - name: Build for Android
+        run: |
+          NDK=$ANDROID_NDK_HOME
+          TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
+          ORT_DIR="$PWD/android/onnxruntime-android"
+          LUA_INCLUDE="/tmp/lua-5.1.5/src"
+          OUT_DIR="$PWD/build/android"
+
+          declare -A ABI_CC=(
+            ["arm64-v8a"]="aarch64-linux-android24-clang"
+            ["armeabi-v7a"]="armv7a-linux-androideabi24-clang"
+          )
+
+          for ABI in arm64-v8a armeabi-v7a; do
+            echo "=== Building $ABI ==="
+            CC="$TOOLCHAIN/bin/${ABI_CC[$ABI]}"
+            ABI_OUT="$OUT_DIR/$ABI"
+            mkdir -p "$ABI_OUT"
+
+            $CC -c -fPIC -O2 -Wall \
+              -I"$ORT_DIR/headers" \
+              -I"$LUA_INCLUDE" \
+              -o "$ABI_OUT/plugin_onnxruntime.o" \
+              plugin_onnxruntime.c
+
+            $CC -shared -Wl,--warn-unresolved-symbols \
+              -o "$ABI_OUT/libplugin_onnxruntime.so" \
+              "$ABI_OUT/plugin_onnxruntime.o" \
+              -L"$ORT_DIR/jni/$ABI" -lonnxruntime
+
+            rm -f "$ABI_OUT/plugin_onnxruntime.o"
+            cp "$ORT_DIR/jni/$ABI/libonnxruntime.so" "$ABI_OUT/"
+            ls -lh "$ABI_OUT/"
+          done
+
+      - name: Package android tgz
+        run: |
+          STAGING=$(mktemp -d)
+          mkdir -p "$STAGING/jni/arm64-v8a" "$STAGING/jni/armeabi-v7a"
+          cp build/android/arm64-v8a/*.so "$STAGING/jni/arm64-v8a/"
+          cp build/android/armeabi-v7a/*.so "$STAGING/jni/armeabi-v7a/"
+          cat > "$STAGING/metadata.lua" << 'METALUA'
+          local metadata =
+          {
+            plugin =
+            {
+              format = 'sharedLibrary',
+            },
+          }
+          return metadata
+          METALUA
+          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-android.tgz" -C "$STAGING" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: build/*.tgz
+
+  # ── iOS device (arm64 static lib) ─────────────────────────
+  build-iphone:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ONNX Runtime iOS
+        run: cd ios && bash download_ort.sh
+
+      - name: Download Lua 5.1 headers
+        run: |
+          curl -fL -o /tmp/lua-5.1.5.tar.gz https://www.lua.org/ftp/lua-5.1.5.tar.gz
+          tar xzf /tmp/lua-5.1.5.tar.gz -C /tmp
+          echo "LUA_INCLUDE=/tmp/lua-5.1.5/src" >> $GITHUB_ENV
+
+      - name: Find ORT headers
+        run: |
+          ORT_DIR="$PWD/ios/onnxruntime-ios"
+          for dir in "$ORT_DIR/Headers" "$ORT_DIR/onnxruntime.xcframework/ios-arm64/onnxruntime.framework/Headers"; do
+            if [ -f "$dir/onnxruntime_c_api.h" ]; then
+              echo "ORT_INCLUDE=$dir" >> $GITHUB_ENV
+              break
+            fi
+          done
+          if [ -z "${ORT_INCLUDE:-}" ]; then
+            FOUND=$(find "$ORT_DIR" -name "onnxruntime_c_api.h" -print -quit 2>/dev/null || true)
+            if [ -n "$FOUND" ]; then
+              echo "ORT_INCLUDE=$(dirname "$FOUND")" >> $GITHUB_ENV
+            else
+              echo "ERROR: onnxruntime_c_api.h not found in $ORT_DIR"
+              find "$ORT_DIR" -type f | head -30
+              exit 1
+            fi
+          fi
+
+      - name: Build iOS device (arm64)
+        run: |
+          mkdir -p build/iphone
+          xcrun -sdk iphoneos clang -c \
+            -arch arm64 \
+            -isysroot "$(xcrun -sdk iphoneos --show-sdk-path)" \
+            -miphoneos-version-min=13.0 \
+            -I"$ORT_INCLUDE" \
+            -I"$LUA_INCLUDE" \
+            -O2 -Wall \
+            -o build/iphone/plugin_onnxruntime_arm64.o \
+            plugin_onnxruntime.c
+          ar rcs build/iphone/libplugin_onnxruntime.a build/iphone/plugin_onnxruntime_arm64.o
+          rm -f build/iphone/*.o
+          ls -lh build/iphone/libplugin_onnxruntime.a
+
+      - name: Package iphone tgz
+        run: |
+          STAGING=$(mktemp -d)
+          cp build/iphone/libplugin_onnxruntime.a "$STAGING/"
+          cat > "$STAGING/metadata.lua" << 'METALUA'
+          local metadata =
+          {
+            plugin =
+            {
+              format = 'staticLibrary',
+              staticLibs = { 'plugin_onnxruntime', },
+              frameworks = {},
+              frameworksOptional = {},
+            },
+          }
+          return metadata
+          METALUA
+          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-iphone.tgz" -C "$STAGING" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iphone
+          path: build/*.tgz
+
+  # ── iOS Simulator (arm64 + x86_64 static lib) ─────────────
+  build-iphone-sim:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ONNX Runtime iOS
+        run: cd ios && bash download_ort.sh
+
+      - name: Download Lua 5.1 headers
+        run: |
+          curl -fL -o /tmp/lua-5.1.5.tar.gz https://www.lua.org/ftp/lua-5.1.5.tar.gz
+          tar xzf /tmp/lua-5.1.5.tar.gz -C /tmp
+          echo "LUA_INCLUDE=/tmp/lua-5.1.5/src" >> $GITHUB_ENV
+
+      - name: Find ORT headers
+        run: |
+          ORT_DIR="$PWD/ios/onnxruntime-ios"
+          for dir in "$ORT_DIR/Headers" "$ORT_DIR/onnxruntime.xcframework/ios-arm64/onnxruntime.framework/Headers"; do
+            if [ -f "$dir/onnxruntime_c_api.h" ]; then
+              echo "ORT_INCLUDE=$dir" >> $GITHUB_ENV
+              break
+            fi
+          done
+          if [ -z "${ORT_INCLUDE:-}" ]; then
+            FOUND=$(find "$ORT_DIR" -name "onnxruntime_c_api.h" -print -quit 2>/dev/null || true)
+            if [ -n "$FOUND" ]; then
+              echo "ORT_INCLUDE=$(dirname "$FOUND")" >> $GITHUB_ENV
+            else
+              echo "ERROR: onnxruntime_c_api.h not found"
+              exit 1
+            fi
+          fi
+
+      - name: Build iOS simulator (arm64 + x86_64)
+        run: |
+          mkdir -p build/iphone-sim
+          for ARCH in arm64 x86_64; do
+            xcrun -sdk iphonesimulator clang -c \
+              -arch "$ARCH" \
+              -isysroot "$(xcrun -sdk iphonesimulator --show-sdk-path)" \
+              -mios-simulator-version-min=13.0 \
+              -I"$ORT_INCLUDE" \
+              -I"$LUA_INCLUDE" \
+              -O2 -Wall \
+              -o "build/iphone-sim/plugin_onnxruntime_sim_${ARCH}.o" \
+              plugin_onnxruntime.c
+          done
+          ar rcs build/iphone-sim/libplugin_onnxruntime.a \
+            build/iphone-sim/plugin_onnxruntime_sim_arm64.o \
+            build/iphone-sim/plugin_onnxruntime_sim_x86_64.o
+          rm -f build/iphone-sim/*.o
+          ls -lh build/iphone-sim/libplugin_onnxruntime.a
+
+      - name: Package iphone-sim tgz
+        run: |
+          STAGING=$(mktemp -d)
+          cp build/iphone-sim/libplugin_onnxruntime.a "$STAGING/"
+          cat > "$STAGING/metadata.lua" << 'METALUA'
+          local metadata =
+          {
+            plugin =
+            {
+              format = 'staticLibrary',
+              staticLibs = { 'plugin_onnxruntime', },
+              frameworks = {},
+              frameworksOptional = {},
+            },
+          }
+          return metadata
+          METALUA
+          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-iphone-sim.tgz" -C "$STAGING" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iphone-sim
+          path: build/*.tgz
+
+  # ── Windows (x64 DLL) ─────────────────────────────────────
+  build-win32-sim:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ONNX Runtime Windows
+        shell: pwsh
+        run: |
+          $ORT_VERSION = "${{ env.ORT_VERSION }}"
+          $URL = "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-win-x64-${ORT_VERSION}.zip"
+          $OUT = "win32\onnxruntime-win"
+          Invoke-WebRequest -Uri $URL -OutFile "$env:TEMP\ort.zip"
+          Expand-Archive -Path "$env:TEMP\ort.zip" -DestinationPath "$env:TEMP\ort-extract" -Force
+          $extracted = Get-ChildItem "$env:TEMP\ort-extract" | Select-Object -First 1
+          New-Item -ItemType Directory -Path $OUT -Force | Out-Null
+          Copy-Item -Path "$($extracted.FullName)\*" -Destination $OUT -Recurse -Force
+
+      - name: Download Lua 5.1 headers
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://www.lua.org/ftp/lua-5.1.5.tar.gz" -OutFile "$env:TEMP\lua.tar.gz"
+          tar xzf "$env:TEMP\lua.tar.gz" -C "$env:TEMP"
+          echo "LUA_INCLUDE=$env:TEMP\lua-5.1.5\src" >> $env:GITHUB_ENV
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build DLL
+        shell: cmd
+        run: |
+          mkdir build\win32-sim 2>nul
+          cl /O2 /LD /W3 ^
+            /I"win32\onnxruntime-win\include" ^
+            /I"%LUA_INCLUDE%" ^
+            plugin_onnxruntime.c ^
+            /Fe"build\win32-sim\plugin_onnxruntime.dll" ^
+            /link /LIBPATH:"win32\onnxruntime-win\lib" onnxruntime.lib
+          dir build\win32-sim\plugin_onnxruntime.dll
+
+      - name: Package win32-sim tgz
+        shell: bash
+        run: |
+          STAGING=$(mktemp -d)
+          cp build/win32-sim/plugin_onnxruntime.dll "$STAGING/"
+          cat > "$STAGING/metadata.lua" << 'METALUA'
+          local metadata =
+          {
+            plugin =
+            {
+              format = 'sharedLibrary',
+            },
+          }
+          return metadata
+          METALUA
+          tar czf "build/${SOLAR2D_YEAR}.${SOLAR2D_BUILD}-win32-sim.tgz" -C "$STAGING" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win32-sim
+          path: build/*.tgz
+
+  # ── Release (on tag push v1, v2, ...) ─────────────────────
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-mac-sim, build-android, build-iphone, build-iphone-sim, build-win32-sim]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Collect tgz files
+        run: |
+          mkdir -p release
+          find artifacts -name '*.tgz' -exec cp {} release/ \;
+          echo "=== Release files ==="
+          ls -lh release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Release ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: release/*.tgz
