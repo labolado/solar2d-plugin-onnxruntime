@@ -107,13 +107,21 @@ build.bat
 settings = {
     plugins = {
         ["plugin.onnxruntime"] = {
-            publisherId = "com.yourcompany",
+            publisherId = "com.labolado",
         },
     },
 }
 ```
 
 Or install directly via `make mac-install` for Simulator testing.
+
+## Example
+
+The `example/` directory contains a combined demo with:
+- **Style Transfer** — apply candy/mosaic artistic styles to an image
+- **Text-to-Speech** — generate speech from "Hello world" using Kitten TTS Nano
+
+To run: open `example/` as a Solar2D project in the Simulator.
 
 ## Architecture
 

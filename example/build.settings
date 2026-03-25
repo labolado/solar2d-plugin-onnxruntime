@@ -1,0 +1,14 @@
+settings = {
+    orientation = {
+        default = "landscapeRight",
+        supported = { "landscapeLeft", "landscapeRight" },
+    },
+    plugins = {
+        ["plugin.onnxruntime"] = {
+            publisherId = "com.labolado",
+        },
+        ["plugin.Bytemap"] = {
+            publisherId = "com.xibalbastudios",
+        },
+    },
+}
