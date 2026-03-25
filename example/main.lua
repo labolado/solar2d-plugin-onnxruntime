@@ -4,17 +4,17 @@ local ort = require("plugin.onnxruntime")
 
 display.setDefault("background", 0.07, 0.07, 0.09)
 
-local CW = display.contentWidth   -- 320
-local CH = display.contentHeight  -- 568
+local CW = display.contentWidth   -- 390
+local CH = display.contentHeight  -- 844
 local CX = display.contentCenterX
-local PAD = 14
+local PAD = 18
 local SIZE = 224
 local sampleRate = 24000
 
 -- ── Helpers ─────────────────────────────────────────────────
 
 local function card(y, h)
-    local r = display.newRoundedRect(CX, y, CW - PAD * 2, h, 10)
+    local r = display.newRoundedRect(CX, y, CW - PAD * 2, h, 14)
     r:setFillColor(0.12, 0.12, 0.14)
     r.strokeWidth = 1; r:setStrokeColor(0.2, 0.2, 0.24)
     return r
@@ -24,7 +24,7 @@ local function txt(text, x, y, size, bold, r, g, b)
     local t = display.newText({
         text = text, x = x, y = y,
         font = bold and native.systemFontBold or native.systemFont,
-        fontSize = size or 13
+        fontSize = size or 14
     })
     t:setFillColor(r or 0.7, g or 0.7, b or 0.7)
     return t
@@ -33,35 +33,35 @@ end
 local function btn(text, x, y, w, h, r, g, b, cb)
     local bg = display.newRoundedRect(x, y, w, h, h / 2)
     bg:setFillColor(r, g, b)
-    txt(text, x, y, 14, true, 1, 1, 1)
+    txt(text, x, y, 16, true, 1, 1, 1)
     bg:addEventListener("tap", function() if cb then cb() end; return true end)
     return bg
 end
 
 -- ── Header ──────────────────────────────────────────────────
 
-local headerH = 44
+local headerH = 56
 local headerBg = display.newRect(CX, headerH / 2, CW, headerH)
 headerBg:setFillColor(0.1, 0.1, 0.13)
-txt("ONNX Runtime", CX - 20, headerH / 2, 17, true, 0.85, 0.9, 1)
-txt("for Solar2D", CX + 58, headerH / 2, 12, false, 0.45, 0.55, 0.7)
+txt("ONNX Runtime", CX - 30, headerH / 2, 20, true, 0.85, 0.9, 1)
+txt("for Solar2D", CX + 72, headerH / 2, 14, false, 0.45, 0.55, 0.7)
 local ver = (ort.VERSION or "?"):gsub("^v", "")
-txt("v" .. ver, CW - PAD - 12, headerH / 2, 10, false, 0.35, 0.35, 0.4)
+txt("v" .. ver, CW - PAD - 14, headerH / 2, 11, false, 0.35, 0.35, 0.4)
 
 -- ── Style Transfer Section ──────────────────────────────────
 
 local stTop = headerH + PAD
-local stH = 310
+local stH = 400
 card(stTop + stH / 2, stH)
 
-txt("Style Transfer", CX, stTop + 18, 15, true, 0.55, 0.78, 1)
+txt("Style Transfer", CX, stTop + 24, 18, true, 0.55, 0.78, 1)
 
-local imgW = 120
-local imgGap = 20
-local imgY = stTop + 18 + imgW / 2 + 24
+local imgW = 150
+local imgGap = 24
+local imgY = stTop + 24 + imgW / 2 + 40
 
 -- Original
-txt("Original", CX - imgW / 2 - imgGap / 2, stTop + 38, 10, false, 0.4)
+txt("Original", CX - imgW / 2 - imgGap / 2, stTop + 50, 12, false, 0.4)
 local originalImage = display.newImage("test_photo.png", system.ResourceDirectory)
 if originalImage then
     originalImage.x = CX - imgW / 2 - imgGap / 2
@@ -70,20 +70,20 @@ if originalImage then
 end
 
 -- Arrow
-txt("→", CX, imgY, 22, true, 0.3)
+txt("→", CX, imgY, 26, true, 0.3)
 
 -- Styled placeholder
-txt("Styled", CX + imgW / 2 + imgGap / 2, stTop + 38, 10, false, 0.4)
-local styledSlot = display.newRoundedRect(CX + imgW / 2 + imgGap / 2, imgY, imgW, imgW, 6)
+txt("Styled", CX + imgW / 2 + imgGap / 2, stTop + 50, 12, false, 0.4)
+local styledSlot = display.newRoundedRect(CX + imgW / 2 + imgGap / 2, imgY, imgW, imgW, 8)
 styledSlot:setFillColor(0.09, 0.09, 0.11)
 styledSlot.strokeWidth = 1; styledSlot:setStrokeColor(0.18)
-local slotQ = txt("?", CX + imgW / 2 + imgGap / 2, imgY, 28, false, 0.18)
+local slotQ = txt("?", CX + imgW / 2 + imgGap / 2, imgY, 36, false, 0.18)
 
 local styleSession, styledImage
 
-local sBtnY = imgY + imgW / 2 + 24
-local styleStatus = txt("Choose a style", CX, sBtnY + 28, 12, false, 0.4)
-local styleTime = txt("", CX, sBtnY + 44, 11, false, 0.3, 0.85, 0.4)
+local sBtnY = imgY + imgW / 2 + 32
+local styleStatus = txt("Choose a style", CX, sBtnY + 34, 13, false, 0.4)
+local styleTime = txt("", CX, sBtnY + 52, 12, false, 0.3, 0.85, 0.4)
 
 local function imageToTensor(path)
     local bm = Bytemap.loadTexture({ filename = path, baseDir = system.ResourceDirectory })
@@ -147,10 +147,10 @@ local function runStyle(name)
     end)
 end
 
--- Buttons
-local bw = (CW - PAD * 2 - 40) / 2
-btn("Candy", CX - bw / 2 - 8, sBtnY, bw, 32, 0.82, 0.3, 0.5, function() runStyle("candy") end)
-btn("Mosaic", CX + bw / 2 + 8, sBtnY, bw, 32, 0.3, 0.5, 0.82, function() runStyle("mosaic") end)
+-- Style buttons
+local bw = (CW - PAD * 2 - 50) / 2
+btn("Candy", CX - bw / 2 - 10, sBtnY, bw, 38, 0.82, 0.3, 0.5, function() runStyle("candy") end)
+btn("Mosaic", CX + bw / 2 + 10, sBtnY, bw, 38, 0.3, 0.5, 0.82, function() runStyle("mosaic") end)
 
 -- ── TTS Section ─────────────────────────────────────────────
 
@@ -158,37 +158,36 @@ local ttsTop = stTop + stH + PAD
 local ttsH = CH - ttsTop - PAD
 card(ttsTop + ttsH / 2, ttsH)
 
-txt("Text-to-Speech", CX, ttsTop + 18, 15, true, 0.55, 0.78, 1)
-txt("Kitten TTS Nano · 23MB", CX, ttsTop + 36, 10, false, 0.35)
+txt("Text-to-Speech", CX, ttsTop + 24, 18, true, 0.55, 0.78, 1)
+txt("Kitten TTS Nano · 23MB ONNX model", CX, ttsTop + 46, 12, false, 0.35)
 
 -- Input box
-local ibY = ttsTop + 60
-local ib = display.newRoundedRect(CX, ibY, CW - PAD * 4, 34, 8)
+local ibY = ttsTop + 78
+local ib = display.newRoundedRect(CX, ibY, CW - PAD * 4, 44, 10)
 ib:setFillColor(0.08, 0.08, 0.1); ib.strokeWidth = 1; ib:setStrokeColor(0.18)
-txt("\"Hello world\"", CX, ibY, 16, true, 0.85, 0.85, 0.9)
-txt("həlˈoʊ wˈɜːld → 14 tokens", CX, ibY + 24, 9, false, 0.3)
+txt("\"Hello world\"", CX, ibY, 20, true, 0.85, 0.85, 0.9)
+txt("həlˈoʊ wˈɜːld → 14 tokens", CX, ibY + 30, 11, false, 0.3)
 
 -- Speak button
-local spkY = ibY + 50
-btn("Speak", CX, spkY, CW - PAD * 4, 36, 0.88, 0.38, 0.2, nil)
--- invisible tap target
-local spkTap = display.newRoundedRect(CX, spkY, CW - PAD * 4, 36, 18)
+local spkY = ibY + 64
+btn("Speak", CX, spkY, CW - PAD * 4, 44, 0.88, 0.38, 0.2, nil)
+local spkTap = display.newRoundedRect(CX, spkY, CW - PAD * 4, 44, 22)
 spkTap:setFillColor(0, 0, 0, 0.01)
 
-local ttsStatus = txt("Tap to synthesize speech", CX, spkY + 28, 11, false, 0.4)
-local ttsTime = txt("", CX, spkY + 42, 10, false, 0.3, 0.85, 0.4)
+local ttsStatus = txt("Tap to synthesize speech", CX, spkY + 36, 13, false, 0.4)
+local ttsTime = txt("", CX, spkY + 54, 12, false, 0.3, 0.85, 0.4)
 
 -- Waveform
 local wvW = CW - PAD * 4
-local wvH = ttsH - (spkY + 54 - ttsTop) - 12
-local wvY = spkY + 54 + wvH / 2
-local wvBg = display.newRoundedRect(CX, wvY, wvW, wvH, 6)
+local wvH = ttsH - (spkY + 68 - ttsTop) - 16
+local wvY = spkY + 68 + wvH / 2
+local wvBg = display.newRoundedRect(CX, wvY, wvW, wvH, 8)
 wvBg:setFillColor(0.06, 0.06, 0.08); wvBg.strokeWidth = 1; wvBg:setStrokeColor(0.15)
-local wvLabel = txt("Waveform", CX, wvY, 12, false, 0.15)
+local wvLabel = txt("Waveform", CX, wvY, 14, false, 0.15)
 local waveGroup = display.newGroup()
 waveGroup.x = CX - wvW / 2; waveGroup.y = wvY - wvH / 2
 
--- "Hello world" phonemized: həlˈoʊ wˈɜːld
+-- "Hello world" phonemized
 local ttsTokens = {50, 83, 54, 156, 57, 135, 16, 65, 156, 87, 158, 54, 46, 16}
 local voiceEmbedding = {
     0.0643, -0.0792, -0.2220, -0.1497, -0.3155, 0.2467, -0.1455, 0.2083,
