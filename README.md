@@ -110,8 +110,8 @@ build.bat
 Prebuilt binaries are available from [GitHub Releases](https://github.com/labolado/solar2d-plugin-onnxruntime/releases). Add to your `build.settings`:
 
 ```lua
--- Change "v2" to the latest release tag
-local ort_base = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v2/"
+-- Change "v3" to the latest release tag
+local ort_base = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/"
 
 settings = {
     plugins = {
