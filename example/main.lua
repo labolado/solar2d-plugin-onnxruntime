@@ -4,77 +4,104 @@
 local Bytemap = require("plugin.Bytemap")
 local ort = require("plugin.onnxruntime")
 
-display.setDefault("background", 0.1, 0.1, 0.12)
+display.setDefault("background", 0.09, 0.09, 0.11)
 
+local CW = display.contentWidth
+local CH = display.contentHeight
+local CX = display.contentCenterX
+local CY = display.contentCenterY
 local SIZE = 224
 local sampleRate = 24000
 
 -- ============================================================
--- UI Setup
+-- Helpers
 -- ============================================================
 
--- Title
-display.newText({
-    text = "ONNX Runtime Demo",
-    x = display.contentCenterX, y = 22,
-    font = native.systemFontBold, fontSize = 20
-})
+local function roundRect(group, x, y, w, h, r, fillR, fillG, fillB, fillA)
+    local rect = display.newRoundedRect(group or display.currentStage, x, y, w, h, r or 8)
+    rect:setFillColor(fillR or 0.15, fillG or 0.15, fillB or 0.18, fillA or 1)
+    return rect
+end
 
--- Divider
-local divY = 215
-local divLine = display.newLine(10, divY, display.contentWidth - 10, divY)
-divLine:setStrokeColor(0.3)
-divLine.strokeWidth = 1
+local function label(text, x, y, size, r, g, b, bold)
+    local t = display.newText({
+        text = text, x = x, y = y,
+        font = bold and native.systemFontBold or native.systemFont,
+        fontSize = size or 14
+    })
+    if r then t:setFillColor(r, g or r, b or r) end
+    return t
+end
 
--- Section labels
-display.newText({
-    text = "Style Transfer",
-    x = display.contentCenterX, y = 42,
-    font = native.systemFontBold, fontSize = 14
-}):setFillColor(0.6, 0.8, 1)
-
-display.newText({
-    text = "Text-to-Speech (Kitten TTS Nano)",
-    x = display.contentCenterX, y = divY + 16,
-    font = native.systemFontBold, fontSize = 14
-}):setFillColor(0.6, 0.8, 1)
+local function makeButton(text, x, y, w, h, r, g, b, callback)
+    local bg = display.newRoundedRect(x, y, w, h, h * 0.35)
+    bg:setFillColor(r, g, b)
+    local lbl = label(text, x, y, 14, 1, 1, 1, true)
+    bg:addEventListener("tap", function() if callback then callback() end; return true end)
+    return bg, lbl
+end
 
 -- ============================================================
--- Style Transfer Section (top half)
+-- Layout: left panel = Style Transfer, right panel = TTS
 -- ============================================================
-local styleSession
-local styledImage
-local styleStatus = display.newText({
-    text = "Tap a style button",
-    x = display.contentCenterX, y = 190,
-    font = native.systemFont, fontSize = 12
-})
-local styleTime = display.newText({
-    text = "",
-    x = display.contentCenterX, y = 203,
-    font = native.systemFont, fontSize = 11
-})
-styleTime:setFillColor(0.3, 1, 0.3)
+
+local PAD = 16
+local panelW = (CW - PAD * 3) / 2
+local panelH = CH - PAD * 2
+local leftX = PAD + panelW / 2
+local rightX = CW - PAD - panelW / 2
+
+-- Panel backgrounds
+local leftPanel = roundRect(nil, leftX, CY, panelW, panelH, 12, 0.13, 0.13, 0.16)
+leftPanel.strokeWidth = 1; leftPanel:setStrokeColor(0.22, 0.22, 0.28)
+local rightPanel = roundRect(nil, rightX, CY, panelW, panelH, 12, 0.13, 0.13, 0.16)
+rightPanel.strokeWidth = 1; rightPanel:setStrokeColor(0.22, 0.22, 0.28)
+
+-- Title bar
+local titleBg = roundRect(nil, CX, 18, CW - 8, 30, 6, 0.12, 0.12, 0.15)
+label("ONNX Runtime for Solar2D — Plugin Demo", CX, 18, 15, 0.7, 0.85, 1, true)
+
+-- Version badge
+local ver = ort.VERSION or "?"
+local verBadge = label("v" .. ver:gsub("^v",""), CW - 40, 18, 11, 0.4, 0.4, 0.5)
+
+-- ============================================================
+-- Style Transfer (left panel)
+-- ============================================================
+
+local stY = PAD + 24  -- section top
+label("Style Transfer", leftX, stY, 16, 0.55, 0.78, 1, true)
+
+local imgSize = math.min(panelW * 0.38, 130)
+local imgY = stY + imgSize / 2 + 36
+
+-- Labels
+label("Original", leftX - imgSize/2 - 16, stY + 22, 11, 0.5)
+label("Styled", leftX + imgSize/2 + 16, stY + 22, 11, 0.5)
 
 -- Original image
 local originalImage = display.newImage("test_photo.png", system.ResourceDirectory)
 if originalImage then
-    originalImage.x = display.contentCenterX - 110
-    originalImage.y = 120
-    originalImage.width = 150
-    originalImage.height = 150
+    originalImage.x = leftX - imgSize/2 - 16
+    originalImage.y = imgY
+    originalImage.width = imgSize
+    originalImage.height = imgSize
 end
 
-display.newText("Original", display.contentCenterX - 110, 58, native.systemFont, 10)
-display.newText("Styled", display.contentCenterX + 110, 58, native.systemFont, 10)
-
 -- Arrow
-display.newText({
-    text = "->",
-    x = display.contentCenterX,
-    y = 120,
-    font = native.systemFontBold, fontSize = 24
-})
+label("→", leftX, imgY, 28, 0.35, true)
+
+-- Styled image placeholder
+local styledPlaceholder = roundRect(nil, leftX + imgSize/2 + 16, imgY, imgSize, imgSize, 6, 0.1, 0.1, 0.13)
+styledPlaceholder.strokeWidth = 1; styledPlaceholder:setStrokeColor(0.2)
+local placeholderText = label("?", leftX + imgSize/2 + 16, imgY, 32, 0.2)
+
+local styleSession
+local styledImage
+
+local btnY = imgY + imgSize/2 + 28
+local styleStatus = label("Choose a style", leftX, btnY + 30, 12, 0.45)
+local styleTime = label("", leftX, btnY + 46, 12, 0.3, 0.9, 0.3)
 
 local function imageToTensor(path)
     local bm = Bytemap.loadTexture({ filename = path, baseDir = system.ResourceDirectory })
@@ -116,6 +143,7 @@ end
 
 local function runStyleTransfer(styleName)
     styleStatus.text = "Loading " .. styleName .. "..."
+    styleStatus:setFillColor(0.7, 0.7, 0.3)
     timer.performWithDelay(50, function()
         local modelPath = system.pathForFile(styleName .. ".onnx", system.ResourceDirectory)
         if not modelPath then styleStatus.text = "Model not found"; return end
@@ -136,36 +164,41 @@ local function runStyleTransfer(styleName)
         styleTime.text = string.format("%.0f ms", elapsed)
 
         if outputs and outputs.output1 then
-            styleStatus.text = styleName .. " applied!"
+            styleStatus.text = styleName:sub(1,1):upper() .. styleName:sub(2) .. " applied!"
+            styleStatus:setFillColor(0.3, 0.9, 0.5)
             if styledImage then styledImage:removeSelf() end
+            placeholderText.isVisible = false
             local img = tensorToImage(outputs.output1.data, SIZE, SIZE)
             if img then
-                img.x = display.contentCenterX + 110
-                img.y = 120
-                img.width = 150
-                img.height = 150
+                img.x = leftX + imgSize/2 + 16
+                img.y = imgY
+                img.width = imgSize
+                img.height = imgSize
                 styledImage = img
             end
         else
             styleStatus.text = "Inference failed"
+            styleStatus:setFillColor(0.9, 0.3, 0.3)
         end
     end)
 end
 
 -- Style buttons
-local styles = { "candy", "mosaic" }
+local styles = { { name = "candy", color = {0.85, 0.35, 0.55} }, { name = "mosaic", color = {0.35, 0.55, 0.85} } }
+local btnW = (panelW - PAD * 3) / 2
 for i, style in ipairs(styles) do
-    local bx = display.contentCenterX - 140 + (i - 1) * 120
-    local by = 120
-    local btn = display.newRoundedRect(bx, by, 50, 24, 4)
-    btn:setFillColor(0.2, 0.5, 0.9)
-    display.newText({ text = style, x = bx, y = by, font = native.systemFontBold, fontSize = 11 })
-    btn:addEventListener("tap", function() runStyleTransfer(style); return true end)
+    local bx = leftX - panelW/2 + PAD + btnW/2 + (i - 1) * (btnW + PAD)
+    makeButton(style.name:sub(1,1):upper() .. style.name:sub(2), bx, btnY, btnW, 32,
+        style.color[1], style.color[2], style.color[3],
+        function() runStyleTransfer(style.name) end)
 end
 
 -- ============================================================
--- TTS Section (bottom half)
+-- TTS Section (right panel)
 -- ============================================================
+
+label("Text-to-Speech", rightX, stY, 16, 0.55, 0.78, 1, true)
+label("Kitten TTS Nano (23MB ONNX model)", rightX, stY + 20, 11, 0.4)
 
 -- "Hello world" phonemized: həlˈoʊ wˈɜːld
 local ttsTokens = {50, 83, 54, 156, 57, 135, 16, 65, 156, 87, 158, 54, 46, 16}
@@ -206,22 +239,34 @@ local voiceEmbedding = {
     0.0720, 0.1461, 0.2053, 0.0024, -0.0197, 0.2478, -0.1094, -0.2614
 }
 
-local ttsStatus = display.newText({
-    text = "Tap to speak",
-    x = display.contentCenterX, y = divY + 50,
-    font = native.systemFont, fontSize = 12
-})
-local ttsTime = display.newText({
-    text = "",
-    x = display.contentCenterX, y = divY + 65,
-    font = native.systemFont, fontSize = 11
-})
-ttsTime:setFillColor(0.3, 1, 0.3)
+-- Input display
+local inputBoxY = stY + 56
+local inputBox = roundRect(nil, rightX, inputBoxY, panelW - PAD * 2, 36, 8, 0.1, 0.1, 0.13)
+inputBox.strokeWidth = 1; inputBox:setStrokeColor(0.2)
+label("\"Hello world\"", rightX, inputBoxY, 18, 0.85, 0.85, 0.9, true)
+
+-- Phoneme display
+label("həlˈoʊ wˈɜːld → 14 tokens", rightX, inputBoxY + 26, 10, 0.35)
+
+-- TTS button
+local ttsBtnY = inputBoxY + 56
+makeButton("Speak", rightX, ttsBtnY, panelW - PAD * 2, 36,
+    0.9, 0.4, 0.2, nil)  -- callback set below
+
+local ttsStatus = label("Tap to synthesize speech", rightX, ttsBtnY + 32, 12, 0.45)
+local ttsTime = label("", rightX, ttsBtnY + 48, 12, 0.3, 0.9, 0.3)
 
 -- Waveform display
+local waveW = panelW - PAD * 2
+local waveH = 80
+local waveY = CH - PAD - waveH / 2 - 8
+local waveBg = roundRect(nil, rightX, waveY, waveW, waveH, 6, 0.08, 0.08, 0.1)
+waveBg.strokeWidth = 1; waveBg:setStrokeColor(0.18)
+local waveLabel = label("Waveform", rightX, waveY, 13, 0.2)
+
 local waveGroup = display.newGroup()
-waveGroup.x = display.contentCenterX - 200
-waveGroup.y = divY + 110
+waveGroup.x = rightX - waveW / 2
+waveGroup.y = waveY - waveH / 2
 
 -- WAV writing helpers (Lua 5.1 compatible)
 local function byte0(v) return v % 256 end
@@ -254,12 +299,9 @@ end
 
 local function drawWaveform(samples, numSamples)
     for i = waveGroup.numChildren, 1, -1 do waveGroup[i]:removeSelf() end
-    local w, h = 400, 60
-    local bg = display.newRect(waveGroup, w/2, h/2, w, h)
-    bg:setFillColor(0.15, 0.15, 0.18)
-    bg.strokeWidth = 1; bg:setStrokeColor(0.3)
+    waveLabel.isVisible = false
+    local w, h = waveW, waveH
     local step = math.max(1, math.floor(numSamples / w))
-    local points = {}
     for i = 0, w - 1 do
         local si = i * step + 1
         local maxVal = 0
@@ -267,18 +309,17 @@ local function drawWaveform(samples, numSamples)
             local v = math.abs(samples[j] or 0)
             if v > maxVal then maxVal = v end
         end
-        points[#points + 1] = { x = i, y = h/2 - maxVal * h/2 }
-        points[#points + 1] = { x = i, y = h/2 + maxVal * h/2 }
-    end
-    for i = 1, #points - 1, 2 do
-        local line = display.newLine(waveGroup, points[i].x, points[i].y, points[i].x, points[i+1].y)
-        line:setStrokeColor(0.3, 0.8, 0.4, 0.8)
+        local barH = maxVal * h * 0.9
+        if barH < 1 then barH = 1 end
+        local line = display.newLine(waveGroup, i, h/2 - barH/2, i, h/2 + barH/2)
+        line:setStrokeColor(0.25, 0.75, 0.4, 0.85)
         line.strokeWidth = 1
     end
 end
 
 local function runTTS()
     ttsStatus.text = "Loading model..."
+    ttsStatus:setFillColor(0.7, 0.7, 0.3)
     timer.performWithDelay(50, function()
         local modelPath = system.pathForFile("kitten_tts_nano_v0_1.onnx", system.ResourceDirectory)
         if not modelPath then ttsStatus.text = "Model not found"; return end
@@ -298,12 +339,12 @@ local function runTTS()
 
         if not outputs or not outputs.waveform then
             ttsStatus.text = "Inference failed"
+            ttsStatus:setFillColor(0.9, 0.3, 0.3)
             return
         end
 
-        ttsTime.text = string.format("%.0f ms | %d samples", elapsed, #outputs.waveform.data)
+        ttsTime.text = string.format("%.0f ms  |  %d samples", elapsed, #outputs.waveform.data)
 
-        -- Trim startup/trailing noise (same as Python KittenTTS API)
         local raw = outputs.waveform.data
         local trimStart = 5001
         local trimEnd = #raw - 10000
@@ -315,32 +356,26 @@ local function runTTS()
 
         local wavPath = system.pathForFile("tts_output.wav", system.TemporaryDirectory)
         if writeWav(wavPath, trimmed, #trimmed) then
-            ttsStatus.text = "\"Hello world\" — playing..."
+            ttsStatus.text = "Playing audio..."
+            ttsStatus:setFillColor(0.3, 0.9, 0.5)
             local sound = audio.loadSound("tts_output.wav", system.TemporaryDirectory)
             if sound then
                 audio.play(sound, { onComplete = function()
-                    ttsStatus.text = "\"Hello world\" — done"
+                    ttsStatus.text = "Done — \"Hello world\""
+                    ttsStatus:setFillColor(0.3, 0.9, 0.5)
                     audio.dispose(sound)
                 end })
             else
                 ttsStatus.text = "Audio playback failed"
+                ttsStatus:setFillColor(0.9, 0.3, 0.3)
             end
         end
     end)
 end
 
--- TTS button
-local ttsBtn = display.newRoundedRect(display.contentCenterX, divY + 50, 160, 30, 6)
-ttsBtn:setFillColor(0.9, 0.4, 0.2)
-display.newText({
-    text = "Speak: Hello World",
-    x = ttsBtn.x, y = ttsBtn.y,
-    font = native.systemFontBold, fontSize = 12
-})
+-- Wire up TTS button (find the rounded rect we created)
+local ttsBtn = display.newRoundedRect(rightX, ttsBtnY, panelW - PAD * 2, 36, 12)
+ttsBtn:setFillColor(0, 0, 0, 0.01) -- invisible tap target over the button
 ttsBtn:addEventListener("tap", function() runTTS(); return true end)
-
--- Status
-ttsStatus.y = divY + 80
-ttsTime.y = divY + 93
 
 print("[Demo] ONNX Runtime Demo loaded")
