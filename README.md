@@ -103,17 +103,28 @@ build.bat
 
 ### build.settings
 
+Prebuilt binaries are available from [GitHub Releases](https://github.com/labolado/solar2d-plugin-onnxruntime/releases). Add to your `build.settings`:
+
 ```lua
+local onnxruntime_v1 = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v1/"
+
 settings = {
     plugins = {
         ["plugin.onnxruntime"] = {
             publisherId = "com.labolado",
+            supportedPlatforms = {
+                ["mac-sim"]     = { url = onnxruntime_v1 .. "2024.0001-mac-sim.tgz" },
+                android         = { url = onnxruntime_v1 .. "2024.0001-android.tgz" },
+                iphone          = { url = onnxruntime_v1 .. "2024.0001-iphone.tgz" },
+                ["iphone-sim"]  = { url = onnxruntime_v1 .. "2024.0001-iphone-sim.tgz" },
+                ["win32-sim"]   = { url = onnxruntime_v1 .. "2024.0001-win32-sim.tgz" },
+            },
         },
     },
 }
 ```
 
-Or install directly via `make mac-install` for Simulator testing.
+Or build from source and install via `make mac-install` for Simulator testing.
 
 ## Example
 
