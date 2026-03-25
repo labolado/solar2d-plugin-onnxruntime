@@ -7,11 +7,11 @@ settings = {
         ["plugin.onnxruntime"] = {
             publisherId = "com.labolado",
             supportedPlatforms = {
-                iphone          = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-iphone.tgz" },
-                ["iphone-sim"]  = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-iphone-sim.tgz" },
-                ["mac-sim"]     = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-mac-sim.tgz" },
-                android         = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-android.tgz" },
-                ["win32-sim"]   = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v3/plugin.onnxruntime-win32-sim.tgz" },
+                iphone          = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v4/plugin.onnxruntime-iphone.tgz" },
+                ["iphone-sim"]  = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v4/plugin.onnxruntime-iphone-sim.tgz" },
+                ["mac-sim"]     = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v4/plugin.onnxruntime-mac-sim.tgz" },
+                android         = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v4/plugin.onnxruntime-android.tgz" },
+                ["win32-sim"]   = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v4/plugin.onnxruntime-win32-sim.tgz" },
             },
         },
         ["plugin.Bytemap"] = {

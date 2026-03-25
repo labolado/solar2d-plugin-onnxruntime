@@ -28,3 +28,8 @@ CMakeFiles/
 .idea/
 *.swp
 *~
+
+# Example test artifacts
+example/.CoronaLiveBuild
+example/deploy-ipad.sh
+example/deploy-sim.sh
