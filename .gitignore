@@ -1,6 +1,7 @@
 # Build output
 build/
 mac/build/
+android/build/
 ios/build/
 win32/build/
 *.dylib
@@ -16,7 +17,6 @@ ios/onnxruntime-ios/
 win32/onnxruntime-win/
 
 # CMake
-android/build/cmake-*/
 CMakeCache.txt
 CMakeFiles/
 
@@ -29,7 +29,5 @@ CMakeFiles/
 *.swp
 *~
 
-# Example test artifacts
+# Example local artifacts
 example/.CoronaLiveBuild
-example/deploy-ipad.sh
-example/deploy-sim.sh
