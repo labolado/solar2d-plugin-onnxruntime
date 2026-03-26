@@ -1,13 +1,14 @@
 @echo off
-REM Build plugin.onnxruntime for Windows (x64)
+REM Build plugin.onnxruntime for Windows (x86 / 32-bit)
+REM Solar2D Windows Simulator is 32-bit, so the plugin must be x86.
 REM
 REM Prerequisites:
 REM   1. Visual Studio with C/C++ workload (or Build Tools)
-REM   2. Download ONNX Runtime Windows:
+REM   2. Download ONNX Runtime Windows (x86):
 REM      powershell -File download_ort.ps1
 REM
 REM Usage:
-REM   Open "Developer Command Prompt for VS"
+REM   Open "x86 Native Tools Command Prompt for VS" (NOT x64!)
 REM   cd win32
 REM   build.bat
 
@@ -31,9 +32,15 @@ if not exist "%LUA_INCLUDE%\lua.h" (
     exit /b 1
 )
 
+REM Verify we're using x86 compiler
+cl 2>&1 | findstr "x86" >nul
+if %ERRORLEVEL% neq 0 (
+    echo WARNING: Compiler may not be x86. Use "x86 Native Tools Command Prompt for VS"
+)
+
 mkdir "%OUT_DIR%" 2>nul
 
-echo Building plugin_onnxruntime.dll ...
+echo Building plugin_onnxruntime.dll (x86) ...
 
 cl /O2 /LD /W3 ^
     /I"%ORT_DIR%\include" ^
@@ -49,4 +56,5 @@ if %ERRORLEVEL% neq 0 (
 
 echo Built: %OUT_DIR%\plugin_onnxruntime.dll
 echo.
-echo Copy to Solar2D project or Simulator Plugins directory to use.
+echo To verify x86: dumpbin /headers "%OUT_DIR%\plugin_onnxruntime.dll" ^| findstr machine
+echo Copy plugin_onnxruntime.dll and onnxruntime.dll to Solar2D Simulator Plugins directory.
