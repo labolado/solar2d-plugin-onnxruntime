@@ -1,305 +1,174 @@
-# Solar2D HTML5 ONNX Runtime JS Bridge — Research Report
+# Solar2D ONNX Runtime HTML5 Plugin — Research & Build Documentation
+
+> **Note**: This document has been updated to reflect the new Emscripten-based approach. The previous JS bridge approach has been deprecated.
 
 ## Executive Summary
 
-**JS Interop Feasibility: ✅ FEASIBLE with limitations**
+**New Approach**: Use Emscripten to compile the native C plugin + ONNX Runtime C API directly to WebAssembly.
 
-Solar2D HTML5 builds support JavaScript interop through the JS Module Loader mechanism. However, **full API compatibility with the native plugin is impossible** due to fundamental architectural differences:
-- Native plugin uses **synchronous** C API calls
-- HTML5/JS bridge is **asynchronous** by design (Promises)
-
-## 1. Solar2D HTML5 JS Interop Research
-
-### 1.1 Mechanism
-
-Solar2D HTML5 builds use Emscripten and provide a JS Module Loader for Lua-JS bridging:
+**Key Principle**: **One codebase, same API.** Developer-written Lua code is identical across all platforms (iOS/Android/macOS/Windows/HTML5):
 
 ```lua
--- Lua side
-local js = require("my_plugin_js")  -- loads my_plugin_js.js
-js.someFunction(args)
-```
-
-```javascript
-// JS side (my_plugin_js.js)
-my_plugin_js = {
-    someFunction: function(args) {
-        // JavaScript code here
-    }
-}
-```
-
-### 1.2 Key Capabilities
-
-| Feature | Support | Notes |
-|---------|---------|-------|
-| Call JS from Lua | ✅ | Direct method calls |
-| Pass numbers/strings | ✅ | Copied by value |
-| Pass Lua tables | ✅ | Converted to JS objects |
-| Pass Lua functions | ✅ | Via `LuaCreateFunction` |
-| Async callbacks | ✅ | JS can call Lua callbacks |
-| Return values | ✅ | Sync only (no async await) |
-
-### 1.3 Function Passing API
-
-```javascript
-// Check if parameter is a function reference
-LuaIsFunction(ref) → boolean
-
-// Convert reference to callable JS function
-LuaCreateFunction(ref) → function
-
-// Release to prevent memory leak
-LuaReleaseFunction(func)
-```
-
-### 1.4 Limitations
-
-1. **No synchronous return from async JS**: Cannot `return await fetch()` to Lua
-2. **Function references expire**: Must call `LuaCreateFunction` immediately in the JS function
-3. **No Promise/await in Lua**: Lua coroutines cannot await JS Promises
-
-## 2. ONNX Runtime Web Research
-
-### 2.1 Package Overview
-
-- **npm package**: `onnxruntime-web`
-- **CDN**: `https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js`
-- **Global object**: `ort`
-
-### 2.2 Core API
-
-```javascript
-// Session creation (async)
-const session = await ort.InferenceSession.create('model.onnx', {
-    executionProviders: ['wasm'],  // or 'webgpu', 'webgl'
-    intraOpNumThreads: 4
-});
-
-// Run inference (async)
-const feeds = {
-    inputName: new ort.Tensor('float32', float32Array, [1, 3, 224, 224])
-};
-const results = await session.run(feeds);
-
-// Results format
-// results.outputName = { data: TypedArray, dims: [...], type: 'float32' }
-```
-
-### 2.3 Execution Providers
-
-| Provider | Description | Availability |
-|----------|-------------|--------------|
-| `wasm` | WebAssembly CPU (default) | All browsers |
-| `webgpu` | WebGPU acceleration | Modern Chrome/Edge |
-| `webgl` | WebGL acceleration | Most browsers (deprecated) |
-| `webnn` | WebNN API | Experimental |
-
-### 2.4 Data Types Supported
-
-- `float32` (default)
-- `float64`
-- `int32`
-- `int64` (BigInt64Array or number array)
-- `uint8`
-
-## 3. API Compatibility Analysis
-
-### 3.1 Native Plugin API (Synchronous)
-
-```lua
-local ort = require("plugin.onnxruntime")
-
--- Load model (sync)
-local session = ort.load(modelPath [, opts])
-
--- Run inference (sync)
-local outputs = session:run({
-    inputName = { dims = {...}, data = {...} }
-})
--- Returns: { outputName = { dims = {...}, data = {...}, data_binary = "..." } }
-
--- Get info (sync)
-local info = session:info()  -- {inputs = {...}, outputs = {...}}
-
--- Close (sync)
+local ort = require('plugin.onnxruntime')
+local session = ort.load(path)
+local out = session:run(inputs)
 session:close()
 ```
 
-### 3.2 HTML5 Plugin API (Asynchronous)
+## Technical Foundation
 
-```lua
-local ort = require("plugin.onnxruntime")
+### Why This Works
 
--- Load model (async with callback)
-ort.load(modelPath, function(session, error)
-    if error then return end
-    
-    -- Run inference (async with callback)
-    session:run({
-        inputName = { dims = {...}, data = {...} }
-    }, function(outputs, error)
-        if error then return end
-        -- Use outputs
-        
-        session:close()
-    end)
-end)
+1. **ONNX Runtime C API is synchronous**: Functions like `OrtCreateSession()`, `OrtRun()` are blocking calls.
+
+2. **Solar2D HTML5 uses Emscripten**: Solar2D's HTML5 build process compiles C code to WebAssembly.
+
+3. **ONNX Runtime supports WASM static libraries**: Microsoft's official build system supports `--build_wasm_static_lib` flag.
+
+### Research Evidence
+
+From the [ONNX Runtime Web Build Documentation](https://onnxruntime.ai/docs/build/web.html):
+
+> "When you build ONNX Runtime Web using `--build_wasm_static_lib` instead of `--build_wasm`, a build script generates a static library of ONNX Runtime Web named `libonnxruntime_webassembly.a`"
+
+This static library can be linked with our `plugin_onnxruntime.c` using Emscripten to produce a single WebAssembly module.
+
+## Previous Approach (Deprecated)
+
+The original approach used a JavaScript bridge:
+- `plugin_onnxruntime_js.js` - JavaScript implementation using onnxruntime-web
+- `plugin_onnxruntime.lua` - Lua wrapper with platform detection
+
+**Why it was deprecated**:
+- onnxruntime-web's `session.run()` is asynchronous (returns Promise)
+- Solar2D does not enable Emscripten's Asyncify feature
+- Could not achieve API compatibility with native platforms
+
+## Current Approach (Emscripten + ORT C API)
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Solar2D HTML5 App                                          │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  Lua Code                                           │   │
+│  │  local ort = require("plugin.onnxruntime")          │   │
+│  │  local session = ort.load("model.onnx")             │   │
+│  │  local out = session:run({input = tensor})          │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                         │                                   │
+│  ┌──────────────────────▼──────────────────────────────┐   │
+│  │  Combined WebAssembly Module                        │   │
+│  │  ┌─────────────────────────────────────────────┐   │   │
+│  │  │  plugin_onnxruntime.c (compiled)            │   │   │
+│  │  │  - luaopen_plugin_onnxruntime               │   │   │
+│  │  │  - session_load, session_run, session_close │   │   │
+│  │  ├─────────────────────────────────────────────┤   │   │
+│  │  │  ONNX Runtime C API (linked)                │   │   │
+│  │  │  - OrtCreateSession                         │   │   │
+│  │  │  - OrtRun                                   │   │   │
+│  │  │  - OrtReleaseSession                        │   │   │
+│  │  └─────────────────────────────────────────────┘   │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 3.3 Compatibility Matrix
+### Build Files
 
-| Feature | Native | HTML5 | Compatible? |
-|---------|--------|-------|-------------|
-| `ort.load()` | sync | async+callback | ❌ No |
-| `session:run()` | sync | async+callback | ❌ No |
+| File | Purpose |
+|------|---------|
+| `web/build.sh` | Build script for WASM compilation |
+| `web/BUILD_GUIDE.md` | Detailed build instructions |
+
+## Build Instructions
+
+### Prerequisites
+
+- Emscripten SDK (emsdk)
+- ONNX Runtime source code
+- CMake 3.26+, Python 3.9+, Ninja
+
+### Quick Build
+
+```bash
+# 1. Build ONNX Runtime WASM static library (one-time)
+cd onnxruntime
+./build.sh --config Release --build_wasm_static_lib --enable_wasm_simd --skip_tests
+
+# 2. Build the plugin
+export ORT_ROOT=/path/to/onnxruntime
+cd solar2d-plugin-onnxruntime/web
+./build.sh Release
+```
+
+See `BUILD_GUIDE.md` for complete instructions.
+
+## Solar2D HTML5 Plugin System
+
+### How Solar2D Loads WASM Plugins
+
+From analysis of [submodule-platform-emscripten](https://github.com/coronalabs/submodule-platform-emscripten):
+
+1. Solar2D HTML5 builds use Emscripten to compile the main engine
+2. Plugins can be provided as:
+   - Static libraries (`.a` files) linked at build time
+   - WebAssembly modules (`.wasm` files) loaded at runtime
+3. The plugin's `luaopen_*` function is called to register Lua bindings
+
+### Emscripten Flags Used by Solar2D
+
+```bash
+emcc ... \
+    -s LEGACY_VM_SUPPORT=1 \
+    -s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]' \
+    -s USE_SDL=2 \
+    -s ALLOW_MEMORY_GROWTH=1
+```
+
+**Important**: Solar2D does NOT use `-s ASYNCIFY=1`, which is why the JS bridge approach couldn't support synchronous APIs.
+
+## API Compatibility Matrix
+
+| Feature | iOS/Android/macOS/Win | HTML5 (New) | Compatible? |
+|---------|----------------------|-------------|-------------|
+| `ort.load()` | sync | sync | ✅ Yes |
+| `session:run()` | sync | sync | ✅ Yes |
 | `session:close()` | sync | sync | ✅ Yes |
 | `session:info()` | sync | sync | ✅ Yes |
 | Input format | `{dims, data}` | `{dims, data}` | ✅ Yes |
-| Output format | `{dims, data, data_binary}` | `{dims, data, data_binary}` | ✅ Yes |
-| `opts.ep` | "coreml"/"directml"/"cpu" | "webgpu"/"webgl"/"wasm" | ⚠️ Different |
+| Output format | `{dims, data}` | `{dims, data}` | ✅ Yes |
 
-## 4. Implementation
+## Current Status
 
-### 4.1 Files Created
+### ✅ Completed
 
-```
-web/
-├── metadata.lua              # Plugin metadata for Solar2D
-├── plugin_onnxruntime_js.js  # JS implementation
-├── plugin_onnxruntime.lua    # Lua wrapper with platform detection
-└── RESEARCH.md              # This document
-```
+1. Build script framework (`web/build.sh`)
+2. Build documentation (`web/BUILD_GUIDE.md`)
+3. Removed deprecated JS bridge files
+4. Restored example/main.lua to master version
 
-### 4.2 Usage Example
+### ⬜ Pending
 
-```lua
-local ort = require("plugin.onnxruntime")
+1. Full ONNX Runtime WASM build (requires build environment)
+2. Integration testing with Solar2D HTML5
+3. Plugin loading mechanism verification
+4. Binary size optimization
 
--- Platform-agnostic check
-if not ort.isAvailable() then
-    print("ONNX Runtime not available on this platform")
-    return
-end
+### Known Issues
 
--- Load model (async)
-ort.load("model.onnx", function(session, error)
-    if error then
-        print("Failed to load model:", error)
-        return
-    end
-    
-    print("Model loaded:", session:info())
-    
-    -- Prepare input
-    local inputs = {
-        input = {
-            dims = {1, 3, 224, 224},
-            data = {0.5, 0.3, ...}  -- 1*3*224*224 numbers
-        }
-    }
-    
-    -- Run inference (async)
-    session:run(inputs, function(outputs, error)
-        if error then
-            print("Inference failed:", error)
-            session:close()
-            return
-        end
-        
-        -- Process results
-        for name, tensor in pairs(outputs) do
-            print(name, "shape:", table.concat(tensor.dims, ","))
-            -- tensor.data is 1-indexed Lua table
-            -- tensor.data_binary is binary string for large tensors
-        end
-        
-        session:close()
-    end)
-end)
-```
+1. **Build complexity**: Full ORT WASM build takes 30-60 minutes
+2. **Binary size**: Full ORT WASM is ~10MB+ (may need minimal build)
+3. **Solar2D integration**: Need to verify plugin loading mechanism
 
-### 4.3 HTML5 Setup
+## References
 
-Add to your `index.html` (before Solar2D script):
+1. [ONNX Runtime Web Build](https://onnxruntime.ai/docs/build/web.html)
+2. [ONNX Runtime C API](https://onnxruntime.ai/docs/api/c/)
+3. [Solar2D Emscripten Platform](https://github.com/coronalabs/submodule-platform-emscripten)
+4. [Emscripten Documentation](https://emscripten.org/docs/)
 
-```html
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
-```
+---
 
-## 5. Limitations and Workarounds
-
-### 5.1 Async-Only API
-
-**Problem**: Native plugin is synchronous, HTML5 is async.
-
-**Workaround**: Use callback pattern exclusively, or create a wrapper:
-
-```lua
--- Async wrapper that works on both platforms
-local function loadModelAsync(modelPath, callback)
-    if system.getInfo("platform") == "html5" then
-        ort.load(modelPath, callback)
-    else
-        -- Native: wrap sync in async callback
-        timer.performWithDelay(1, function()
-            local ok, session = pcall(ort.load, modelPath)
-            callback(session, ok and nil or session)
-        end)
-    end
-end
-```
-
-### 5.2 Execution Provider Names
-
-**Problem**: Different EP names across platforms.
-
-| Native | HTML5 |
-|--------|-------|
-| "cpu" | "wasm" |
-| "coreml" | "webgpu" |
-| "directml" | "webgl" |
-
-**Workaround**: Map common names in your app:
-
-```lua
-local epMap = {
-    cpu = system.getInfo("platform") == "html5" and "wasm" or "cpu",
-    gpu = system.getInfo("platform") == "html5" and "webgpu" or "coreml",
-}
-```
-
-### 5.3 Model Path Resolution
-
-**Problem**: HTML5 uses relative paths from `index.html`.
-
-**Solution**: Place models in the same directory or use absolute URLs.
-
-### 5.4 Large Model Loading
-
-**Problem**: WebAssembly compilation can be slow.
-
-**Solution**: Use WebGPU if available; preload models during splash screen.
-
-## 6. Future Improvements
-
-1. **Web Worker Support**: Run inference in worker to avoid blocking main thread
-2. **Streaming API**: Support for chunked model loading
-3. **Model Caching**: Use IndexedDB to cache compiled models
-4. **SharedArrayBuffer**: For zero-copy tensor transfer (requires COOP/COEP headers)
-
-## 7. Conclusion
-
-✅ **JS Interop is technically feasible**
-
-The Solar2D HTML5 JS bridge provides all necessary mechanisms to call onnxruntime-web from Lua. However, the **asynchronous nature of web APIs creates an irreconcilable API difference** with the synchronous native plugin.
-
-**Recommendation**: 
-- Use the provided HTML5 plugin for web deployments
-- Create a thin abstraction layer in your app to handle platform differences
-- Consider using coroutines in Lua to make async code more readable
-
-**Migration path for existing apps**:
-1. Wrap `ort.load()` calls in async helper functions
-2. Use callbacks for `session:run()` results
-3. Test on both native and HTML5 platforms
+*Last updated: 2026-03-26*  
+*Branch: feature/html5-web-bridge*

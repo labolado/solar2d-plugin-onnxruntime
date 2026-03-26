@@ -12,7 +12,6 @@ settings = {
                 ["mac-sim"]     = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v6/plugin.onnxruntime-mac-sim.tgz" },
                 android         = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v6/plugin.onnxruntime-android.tgz" },
                 ["win32-sim"]   = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v6/plugin.onnxruntime-win32-sim.tgz" },
-                html5           = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v6/plugin.onnxruntime-html5.tgz" },
             },
         },
         ["plugin.Bytemap"] = {
