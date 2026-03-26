@@ -67,18 +67,28 @@ for ABI in arm64-v8a armeabi-v7a; do
         -o "$ABI_OUT/plugin_onnxruntime.o" \
         "$PLUGIN_DIR/plugin_onnxruntime.c"
 
-    # Link (--warn-unresolved-symbols: Lua symbols resolved at runtime by host app)
-    $CC -shared -Wl,--warn-unresolved-symbols \
-        -o "$ABI_OUT/libplugin_onnxruntime.so" \
+    # Link against liblua.so (from Corona APK) so dlopen can resolve Lua symbols.
+    # NOTE: filename uses dots (libplugin.onnxruntime.so) so Corona's Android
+    # loader finds it for require("plugin.onnxruntime"). The exported symbol
+    # luaopen_plugin_onnxruntime uses underscores per Lua convention.
+    LUA_LIB_DIR="${LUA_SO_DIR:-/tmp/corona-android-libs/$ABI}"
+    if [ ! -f "$LUA_LIB_DIR/liblua.so" ]; then
+        echo "WARNING: liblua.so not found at $LUA_LIB_DIR, Lua symbols will be unresolved"
+        LUA_LINK_FLAGS="-Wl,--warn-unresolved-symbols"
+    else
+        LUA_LINK_FLAGS="-L$LUA_LIB_DIR -llua"
+    fi
+    $CC -shared \
+        -o "$ABI_OUT/libplugin.onnxruntime.so" \
         "$ABI_OUT/plugin_onnxruntime.o" \
-        -L"$ORT_DIR/jni/$ABI" -lonnxruntime
+        -L"$ORT_DIR/jni/$ABI" -lonnxruntime $LUA_LINK_FLAGS
 
     rm -f "$ABI_OUT/plugin_onnxruntime.o"
 
     # Copy ORT runtime .so
     cp "$ORT_DIR/jni/$ABI/libonnxruntime.so" "$ABI_OUT/"
 
-    echo "Built: $ABI_OUT/libplugin_onnxruntime.so ($(ls -lh "$ABI_OUT/libplugin_onnxruntime.so" | awk '{print $5}'))"
+    echo "Built: $ABI_OUT/libplugin.onnxruntime.so ($(ls -lh "$ABI_OUT/libplugin.onnxruntime.so" | awk '{print $5}'))"
 done
 
 echo ""

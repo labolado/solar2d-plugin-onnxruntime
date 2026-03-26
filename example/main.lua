@@ -87,6 +87,25 @@ local styleTime = txt("", CX, sBtnY + 52, 12, false, 0.3, 0.85, 0.4)
 
 local function imageToTensor(path)
     local bm = Bytemap.loadTexture({ filename = path, baseDir = system.ResourceDirectory })
+    -- Android: Bytemap can't read from ResourceDirectory; copy to DocumentsDirectory
+    if not bm then
+        local srcPath = system.pathForFile(path, system.ResourceDirectory)
+        if srcPath then
+            local src = io.open(srcPath, "rb")
+            if src then
+                local data = src:read("*a"); src:close()
+                local dstPath = system.pathForFile(path, system.DocumentsDirectory)
+                if dstPath then
+                    local dst = io.open(dstPath, "wb")
+                    if dst then
+                        dst:write(data); dst:close()
+                        bm = Bytemap.loadTexture({ filename = path, baseDir = system.DocumentsDirectory })
+                            or Bytemap.loadTexture({ filename = dstPath })
+                    end
+                end
+            end
+        end
+    end
     if not bm then return nil end
     local w, h = bm.width, bm.height
     local bs = bm:GetBytes(); bm:releaseSelf()
