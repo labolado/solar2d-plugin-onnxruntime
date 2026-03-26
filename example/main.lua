@@ -4,6 +4,17 @@ local ort = require("plugin.onnxruntime")
 
 display.setDefault("background", 0.07, 0.07, 0.09)
 
+-- On Android, small resource files are packed in resource.car and can't be
+-- opened with io.open or Bytemap. Derive the coronaResources base path from
+-- a file that IS extracted (like .onnx models).
+local coronaResDir
+do
+    local ref = system.pathForFile("candy.onnx", system.ResourceDirectory)
+    if ref and ref:find("/") then
+        coronaResDir = ref:match("(.*/)")
+    end
+end
+
 local CW = display.contentWidth   -- 390
 local CH = display.contentHeight  -- 844
 local CX = display.contentCenterX
@@ -87,23 +98,13 @@ local styleTime = txt("", CX, sBtnY + 52, 12, false, 0.3, 0.85, 0.4)
 
 local function imageToTensor(path)
     local bm = Bytemap.loadTexture({ filename = path, baseDir = system.ResourceDirectory })
-    -- Android: Bytemap can't read from ResourceDirectory; copy to DocumentsDirectory
+    -- Android: PNG stays in APK asset manager, Bytemap (C fopen) can't read it.
+    -- Workaround: include a .dat copy of the PNG which Corona extracts to filesystem.
     if not bm then
-        local srcPath = system.pathForFile(path, system.ResourceDirectory)
-        if srcPath then
-            local src = io.open(srcPath, "rb")
-            if src then
-                local data = src:read("*a"); src:close()
-                local dstPath = system.pathForFile(path, system.DocumentsDirectory)
-                if dstPath then
-                    local dst = io.open(dstPath, "wb")
-                    if dst then
-                        dst:write(data); dst:close()
-                        bm = Bytemap.loadTexture({ filename = path, baseDir = system.DocumentsDirectory })
-                            or Bytemap.loadTexture({ filename = dstPath })
-                    end
-                end
-            end
+        local datName = path:gsub("%.png$", ".dat")
+        local datPath = system.pathForFile(datName, system.ResourceDirectory)
+        if datPath and datPath:find("/") then
+            bm = Bytemap.loadTexture({ filename = datPath })
         end
     end
     if not bm then return nil end
