@@ -3,7 +3,7 @@
 # Usage:
 #   make mac              # build macOS dylib
 #   make mac-install      # build + install to Simulator
-#   make android          # build Android .so (arm64 + armv7)
+#   make android          # clean + build Android .so (arm64 + armv7)
 #   make ios              # build iOS .a (device + simulator)
 #   make clean            # remove all build artifacts
 #   make tgz-mac          # package mac-sim tgz
@@ -19,6 +19,7 @@ mac-install:
 	bash mac/build.sh install
 
 android:
+	rm -rf android/build/
 	cd android && bash download_ort.sh && bash build.sh
 
 ios:
@@ -44,6 +45,9 @@ tgz-mac: mac
 	@echo "Package: $(TGZ_OUT)/plugin.onnxruntime-mac-sim.tgz"
 
 tgz-android: android
+	@# Safety: verify no stale underscore .so exists
+	@if ls android/build/arm64-v8a/libplugin_*.so 1>/dev/null 2>&1; then \
+		echo "ERROR: stale underscore .so found in build dir"; exit 1; fi
 	@mkdir -p $(TGZ_OUT)/android-staging/jniLibs/arm64-v8a $(TGZ_OUT)/android-staging/jniLibs/armeabi-v7a
 	@cp android/build/arm64-v8a/libplugin.onnxruntime.so $(TGZ_OUT)/android-staging/jniLibs/arm64-v8a/
 	@cp android/build/arm64-v8a/libonnxruntime.so $(TGZ_OUT)/android-staging/jniLibs/arm64-v8a/
@@ -54,6 +58,7 @@ tgz-android: android
 	@cd $(TGZ_OUT)/android-staging && tar czf ../plugin.onnxruntime-android.tgz *
 	@rm -rf $(TGZ_OUT)/android-staging
 	@echo "Package: $(TGZ_OUT)/plugin.onnxruntime-android.tgz"
+	@echo "Verify:" && tar tzf $(TGZ_OUT)/plugin.onnxruntime-android.tgz | grep plugin
 
 tgz: tgz-mac tgz-android
 	@echo "All packages in $(TGZ_OUT)/"
