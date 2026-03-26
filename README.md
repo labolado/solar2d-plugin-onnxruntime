@@ -2,6 +2,9 @@
 
 Run any ONNX model in Solar2D. Single C source file, builds for macOS, iOS, Android, Windows.
 
+<img width="242" height="505" alt="image" src="https://github.com/user-attachments/assets/4f624544-747d-4eb5-916b-6e38dc8311d7" />
+
+
 ## Quick Start
 
 ```lua
