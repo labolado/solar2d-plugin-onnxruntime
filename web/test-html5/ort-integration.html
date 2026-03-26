@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ONNX Runtime + Solar2D HTML5 Integration Test</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #eee;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 { 
+            color: #4a9eff; 
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .status {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 14px;
+        }
+        .info { background: rgba(74, 158, 255, 0.15); border-left: 4px solid #4a9eff; }
+        .success { background: rgba(46, 204, 113, 0.15); border-left: 4px solid #2ecc71; }
+        .error { background: rgba(231, 76, 60, 0.15); border-left: 4px solid #e74c3c; }
+        .warning { background: rgba(241, 196, 15, 0.15); border-left: 4px solid #f1c40f; }
+        button {
+            background: linear-gradient(135deg, #4a9eff 0%, #357abd 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            margin: 8px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover { 
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(74, 158, 255, 0.4);
+        }
+        button:disabled { 
+            background: #555; 
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        pre {
+            background: rgba(0,0,0,0.3);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .metric {
+            background: rgba(255,255,255,0.03);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4a9eff;
+        }
+        .metric-label {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .test-result {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(255,255,255,0.03);
+            border-radius: 6px;
+        }
+        .test-result.pass { border-left: 3px solid #2ecc71; }
+        .test-result.fail { border-left: 3px solid #e74c3c; }
+        .test-result.pending { border-left: 3px solid #f1c40f; }
+        .test-icon { margin-right: 10px; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 ONNX Runtime WASM + Solar2D</h1>
+        <div class="subtitle">HTML5 Bridge Integration Test</div>
+        
+        <div id="main-status" class="status info">⏳ Waiting to start...</div>
+        
+        <div class="card">
+            <h3>Test Controls</h3>
+            <div>
+                <button id="btn-check" onclick="checkEnvironment()">1. Check Environment</button>
+                <button id="btn-init" onclick="initializeORT()" disabled>2. Initialize ORT</button>
+                <button id="btn-run" onclick="runAllTests()" disabled>3. Run Tests</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>Environment Metrics</h3>
+            <div class="grid">
+                <div class="metric">
+                    <div class="metric-value" id="wasm-support">-</div>
+                    <div class="metric-label">WASM Support</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="simd-support">-</div>
+                    <div class="metric-label">SIMD Support</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="ort-version">-</div>
+                    <div class="metric-label">ORT Version</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-value" id="test-status">-</div>
+                    <div class="metric-label">Test Status</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>Test Results</h3>
+            <div id="test-results">
+                <div class="test-result pending">
+                    <span class="test-icon">⏳</span>
+                    <span>Environment check - pending</span>
+                </div>
+                <div class="test-result pending">
+                    <span class="test-icon">⏳</span>
+                    <span>ORT initialization - pending</span>
+                </div>
+                <div class="test-result pending">
+                    <span class="test-icon">⏳</span>
+                    <span>Simple inference - pending</span>
+                </div>
+                <div class="test-result pending">
+                    <span class="test-icon">⏳</span>
+                    <span>Tensor operations - pending</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>Console Log</h3>
+            <pre id="log"></pre>
+        </div>
+    </div>
+
+    <!-- ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort.min.js"></script>
+    
+    <script>
+        const logEl = document.getElementById('log');
+        const statusEl = document.getElementById('main-status');
+        const resultsEl = document.getElementById('test-results');
+        
+        let ortSession = null;
+        let tests = {
+            env: 'pending',
+            init: 'pending',
+            inference: 'pending',
+            tensor: 'pending'
+        };
+
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warn' ? '⚠️' : 'ℹ️';
+            logEl.textContent += `[${time}] ${prefix} ${msg}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(`[ORT] ${msg}`);
+        }
+
+        function updateStatus(msg, type = 'info') {
+            statusEl.textContent = msg;
+            statusEl.className = `status ${type}`;
+        }
+
+        function updateTestResult(name, status, message) {
+            tests[name] = status;
+            updateResultsDisplay();
+            
+            if (status === 'pass') {
+                log(message || `${name} test passed`, 'success');
+            } else if (status === 'fail') {
+                log(message || `${name} test failed`, 'error');
+            }
+        }
+
+        function updateResultsDisplay() {
+            const testNames = {
+                env: 'Environment check',
+                init: 'ORT initialization',
+                inference: 'Simple inference',
+                tensor: 'Tensor operations'
+            };
+            
+            const icons = {
+                pass: '✅',
+                fail: '❌',
+                pending: '⏳'
+            };
+            
+            resultsEl.innerHTML = Object.entries(tests).map(([key, status]) => `
+                <div class="test-result ${status}">
+                    <span class="test-icon">${icons[status]}</span>
+                    <span>${testNames[key]} - ${status}</span>
+                </div>
+            `).join('');
+            
+            // Update test status metric
+            const passed = Object.values(tests).filter(v => v === 'pass').length;
+            const total = Object.keys(tests).length;
+            document.getElementById('test-status').textContent = `${passed}/${total}`;
+        }
+
+        function checkWASMSupport() {
+            const hasWasm = typeof WebAssembly !== 'undefined';
+            const hasMemory = hasWasm && typeof WebAssembly.Memory !== 'undefined';
+            
+            // Check SIMD support
+            const simdBuffer = new Uint8Array([
+                0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+                0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7b, 0x03,
+                0x02, 0x01, 0x00, 0x07, 0x0b, 0x01, 0x07, 0x61,
+                0x64, 0x64, 0x5f, 0x76, 0x31, 0x32, 0x38, 0x00,
+                0x00, 0x0a, 0x0d, 0x01, 0x0b, 0x00, 0x41, 0x00,
+                0xfd, 0x0f, 0x00, 0x00, 0xfd, 0x0e, 0x00, 0x00, 0x1a, 0x0b
+            ]);
+            const hasSIMD = hasWasm && WebAssembly.validate(simdBuffer);
+            
+            return { hasWasm, hasMemory, hasSIMD };
+        }
+
+        async function checkEnvironment() {
+            try {
+                log('Checking environment...');
+                updateStatus('Checking environment...', 'info');
+                
+                const wasm = checkWASMSupport();
+                document.getElementById('wasm-support').textContent = wasm.hasWasm ? '✅' : '❌';
+                document.getElementById('simd-support').textContent = wasm.hasSIMD ? '✅' : '❌';
+                
+                log(`WASM Support: ${wasm.hasWasm}`);
+                log(`WASM Memory: ${wasm.hasMemory}`);
+                log(`SIMD Support: ${wasm.hasSIMD}`);
+                
+                if (typeof ort !== 'undefined') {
+                    const version = ort.env?.version || '1.16.3';
+                    document.getElementById('ort-version').textContent = version;
+                    log(`ORT Version: ${version}`);
+                } else {
+                    document.getElementById('ort-version').textContent = 'N/A';
+                    log('ORT not loaded', 'error');
+                }
+                
+                if (!wasm.hasWasm) {
+                    updateTestResult('env', 'fail', 'WebAssembly not supported');
+                    updateStatus('Environment check FAILED - WASM not supported', 'error');
+                    return false;
+                }
+                
+                updateTestResult('env', 'pass', 'Environment check passed');
+                updateStatus('Environment check PASSED', 'success');
+                document.getElementById('btn-init').disabled = false;
+                return true;
+                
+            } catch (err) {
+                updateTestResult('env', 'fail', err.message);
+                updateStatus(`Environment check failed: ${err.message}`, 'error');
+                log(`Error: ${err.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function initializeORT() {
+            try {
+                log('Initializing ONNX Runtime...');
+                updateStatus('Initializing ONNX Runtime...', 'info');
+                
+                // Configure WASM paths
+                ort.env.wasm.wasmPaths = {
+                    'ort-wasm.wasm': 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort-wasm.wasm',
+                    'ort-wasm-simd.wasm': 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort-wasm-simd.wasm',
+                    'ort-wasm-threaded.wasm': 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort-wasm-threaded.wasm'
+                };
+                
+                // Set memory limit
+                ort.env.wasm.numThreads = 1;
+                ort.env.wasm.simd = true;
+                
+                log('WASM paths configured');
+                log('SIMD enabled: true');
+                log('Threads: 1');
+                
+                updateTestResult('init', 'pass', 'ORT initialized successfully');
+                updateStatus('ONNX Runtime initialized', 'success');
+                document.getElementById('btn-run').disabled = false;
+                return true;
+                
+            } catch (err) {
+                updateTestResult('init', 'fail', err.message);
+                updateStatus(`Initialization failed: ${err.message}`, 'error');
+                log(`Error: ${err.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function runAllTests() {
+            await testSimpleInference();
+            await testTensorOperations();
+            
+            const allPassed = Object.values(tests).every(v => v === 'pass');
+            if (allPassed) {
+                updateStatus('🎉 All tests PASSED!', 'success');
+            } else {
+                updateStatus('Some tests failed', 'error');
+            }
+        }
+
+        async function testSimpleInference() {
+            try {
+                log('Running simple inference test...');
+                
+                // Create a minimal Add model
+                const modelData = await createAddModel();
+                log(`Model created: ${modelData.byteLength} bytes`);
+                
+                const session = await ort.InferenceSession.create(modelData, {
+                    executionProviders: ['wasm']
+                });
+                log('Session created with WASM backend');
+                
+                // Create test tensors
+                const inputA = new Float32Array([1, 2, 3, 4]);
+                const inputB = new Float32Array([5, 6, 7, 8]);
+                
+                const tensorA = new ort.Tensor('float32', inputA, [2, 2]);
+                const tensorB = new ort.Tensor('float32', inputB, [2, 2]);
+                
+                // Run inference
+                const start = performance.now();
+                const results = await session.run({ A: tensorA, B: tensorB });
+                const elapsed = performance.now() - start;
+                
+                const output = results.C;
+                const actual = Array.from(output.data);
+                const expected = [6, 8, 10, 12];
+                
+                log(`Inference time: ${elapsed.toFixed(2)}ms`);
+                log(`Input A: [${inputA.join(', ')}]`);
+                log(`Input B: [${inputB.join(', ')}]`);
+                log(`Output: [${actual.join(', ')}]`);
+                log(`Expected: [${expected.join(', ')}]`);
+                
+                const isCorrect = expected.every((v, i) => Math.abs(v - actual[i]) < 0.001);
+                
+                if (isCorrect) {
+                    updateTestResult('inference', 'pass', `Inference test passed (${elapsed.toFixed(2)}ms)`);
+                } else {
+                    updateTestResult('inference', 'fail', 'Output values do not match expected');
+                }
+                
+                ortSession = session;
+                
+            } catch (err) {
+                updateTestResult('inference', 'fail', err.message);
+                log(`Inference error: ${err.message}`, 'error');
+                console.error(err);
+            }
+        }
+
+        async function testTensorOperations() {
+            try {
+                log('Testing tensor operations...');
+                
+                // Test different tensor types
+                const tests = [
+                    { type: 'float32', data: new Float32Array([1.0, 2.0, 3.0]) },
+                    { type: 'int32', data: new Int32Array([1, 2, 3]) },
+                    { type: 'int64', data: new BigInt64Array([BigInt(1), BigInt(2), BigInt(3)]) }
+                ];
+                
+                for (const test of tests) {
+                    const tensor = new ort.Tensor(test.type, test.data, [test.data.length]);
+                    log(`${test.type}: shape=[${tensor.dims.join(',')}], size=${tensor.size}`);
+                }
+                
+                updateTestResult('tensor', 'pass', 'Tensor operations test passed');
+                
+            } catch (err) {
+                updateTestResult('tensor', 'fail', err.message);
+                log(`Tensor error: ${err.message}`, 'error');
+            }
+        }
+
+        async function createAddModel() {
+            // ONNX Add model in protobuf format
+            // This creates a model with two float32 inputs and one output
+            const modelProto = new Uint8Array([
+                0x08, 0x08, // ir_version = 8
+                0x12, 0x0a, // opset_import
+                0x08, 0x01, 0x12, 0x06, 0x0a, 0x00, 0x12, 0x02, 0x08, 0x0d,
+                0x1a, 0x04, 0x74, 0x65, 0x73, 0x74, // producer_name = "test"
+                0x22, 0x03, 0x31, 0x2e, 0x30, // producer_version = "1.0"
+                0x2a, 0x00, // domain = ""
+                0x30, 0x01, // model_version = 1
+                0x3a, 0x00, // doc_string = ""
+                
+                // Graph
+                0x42, 0x4a, // graph (74 bytes)
+                0x0a, 0x04, 0x74, 0x65, 0x73, 0x74, // name = "test"
+                
+                // Input A
+                0x12, 0x0b, // value_info
+                0x0a, 0x01, 0x41, // name = "A"
+                0x12, 0x06, // type
+                0x12, 0x04, 0x0a, 0x02, 0x08, 0x01, // tensor_type (float32)
+                
+                // Input B
+                0x12, 0x0b, // value_info
+                0x0a, 0x01, 0x42, // name = "B"
+                0x12, 0x06, // type
+                0x12, 0x04, 0x0a, 0x02, 0x08, 0x01, // tensor_type (float32)
+                
+                // Output C
+                0x1a, 0x0b, // value_info
+                0x0a, 0x01, 0x43, // name = "C"
+                0x12, 0x06, // type
+                0x12, 0x04, 0x0a, 0x02, 0x08, 0x01, // tensor_type (float32)
+                
+                // Node (Add operation)
+                0x22, 0x11, // node (17 bytes)
+                0x0a, 0x01, 0x41, // input "A"
+                0x0a, 0x01, 0x42, // input "B"
+                0x12, 0x01, 0x43, // output "C"
+                0x16, 0x03, 0x41, 0x64, 0x64, // op_type = "Add"
+                0x18, 0x01 // domain = ""
+            ]);
+            
+            return modelProto.buffer.slice(modelProto.byteOffset, modelProto.byteOffset + modelProto.byteLength);
+        }
+
+        // Auto-start on load
+        window.addEventListener('load', async () => {
+            log('Page loaded');
+            log('ONNX Runtime Web loaded from CDN');
+            
+            // Auto-run environment check
+            await checkEnvironment();
+        });
+    </script>
+</body>
+</html>

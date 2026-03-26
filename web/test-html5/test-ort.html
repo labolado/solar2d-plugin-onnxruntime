@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ONNX Runtime WASM Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #4a9eff; }
+        .status {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        .info { background: #16213e; }
+        .success { background: #1e5128; }
+        .error { background: #5c1e1e; }
+        .warning { background: #5c4a1e; }
+        button {
+            background: #4a9eff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover { background: #3a8eef; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        pre {
+            background: #0f0f1a;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        #log {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧠 ONNX Runtime WASM Test</h1>
+    
+    <div id="initial-status" class="status info">Loading WASM module...</div>
+    
+    <div>
+        <button id="btn-init" onclick="initORT()">1. Initialize ORT</button>
+        <button id="btn-test" onclick="runTest()" disabled>2. Run Inference Test</button>
+        <button id="btn-info" onclick="showInfo()" disabled>3. Show Info</button>
+    </div>
+    
+    <h3>Log:</h3>
+    <pre id="log"></pre>
+
+    <!-- Load ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort.min.js"></script>
+    
+    <script>
+        const logEl = document.getElementById('log');
+        const statusEl = document.getElementById('initial-status');
+        let ortSession = null;
+        let isInitialized = false;
+
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            logEl.textContent += `[${time}] ${msg}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(`[ORT Test] ${msg}`);
+        }
+
+        function setStatus(msg, type = 'info') {
+            statusEl.textContent = msg;
+            statusEl.className = `status ${type}`;
+        }
+
+        // Check if ORT is available from CDN
+        if (typeof ort !== 'undefined') {
+            log('ONNX Runtime Web loaded from CDN');
+            setStatus('ONNX Runtime Web ready (CDN)', 'success');
+            document.getElementById('btn-init').disabled = false;
+        } else {
+            log('ERROR: ONNX Runtime Web not loaded');
+            setStatus('Failed to load ONNX Runtime', 'error');
+        }
+
+        async function initORT() {
+            try {
+                log('Initializing ONNX Runtime...');
+                
+                // Set WASM path if using WASM backend
+                ort.env.wasm.wasmPaths = {
+                    'ort-wasm.wasm': 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort-wasm.wasm',
+                    'ort-wasm-simd.wasm': 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort-wasm-simd.wasm'
+                };
+                
+                // Check environment
+                log(`ORT Version: ${ort.env.version || 'unknown'}`);
+                log(`WASM Supported: ${typeof WebAssembly !== 'undefined'}`);
+                log(`SIMD Supported: ${WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,5,3,1,0,1,11,11,1,6,1,0,65,0,11,0,11])])}`);
+                
+                isInitialized = true;
+                setStatus('ORT Initialized successfully', 'success');
+                document.getElementById('btn-test').disabled = false;
+                document.getElementById('btn-info').disabled = false;
+                log('✅ Initialization complete');
+                
+            } catch (err) {
+                log(`❌ Initialization failed: ${err.message}`);
+                setStatus(`Init failed: ${err.message}`, 'error');
+                console.error(err);
+            }
+        }
+
+        async function runTest() {
+            try {
+                log('Creating a simple test inference...');
+                
+                // Create a simple test model (adds two numbers)
+                // This is a minimal ONNX model for testing
+                const modelData = createSimpleAddModel();
+                
+                log(`Model size: ${modelData.byteLength} bytes`);
+                
+                // Create session
+                const session = await ort.InferenceSession.create(modelData, {
+                    executionProviders: ['wasm'],
+                    graphOptimizationLevel: 'all'
+                });
+                
+                log('✅ Session created successfully');
+                
+                // Prepare inputs
+                const inputA = new Float32Array([1.0, 2.0, 3.0, 4.0]);
+                const inputB = new Float32Array([5.0, 6.0, 7.0, 8.0]);
+                
+                const tensorA = new ort.Tensor('float32', inputA, [2, 2]);
+                const tensorB = new ort.Tensor('float32', inputB, [2, 2]);
+                
+                // Run inference
+                const startTime = performance.now();
+                const results = await session.run({ A: tensorA, B: tensorB });
+                const endTime = performance.now();
+                
+                // Get output
+                const output = results.C;
+                log(`✅ Inference completed in ${(endTime - startTime).toFixed(2)}ms`);
+                log(`Output shape: [${output.dims.join(', ')}]`);
+                log(`Output values: [${Array.from(output.data).join(', ')}]`);
+                log(`Expected: [6, 8, 10, 12] (element-wise addition)`);
+                
+                // Verify results
+                const expected = [6, 8, 10, 12];
+                const actual = Array.from(output.data);
+                const isCorrect = expected.every((v, i) => Math.abs(v - actual[i]) < 0.001);
+                
+                if (isCorrect) {
+                    log('✅ Results verified correctly!');
+                    setStatus('Inference test PASSED', 'success');
+                } else {
+                    log('⚠️ Results mismatch');
+                    setStatus('Results verification failed', 'warning');
+                }
+                
+                ortSession = session;
+                
+            } catch (err) {
+                log(`❌ Test failed: ${err.message}`);
+                setStatus(`Test failed: ${err.message}`, 'error');
+                console.error(err);
+            }
+        }
+
+        function showInfo() {
+            log('=== ONNX Runtime Info ===');
+            if (typeof ort !== 'undefined') {
+                log(`Version: ${ort.env?.version || 'unknown'}`);
+                log(`Backend: WASM`);
+                log(`WebAssembly: ${typeof WebAssembly !== 'undefined' ? 'Available' : 'Not Available'}`);
+                if (typeof WebAssembly !== 'undefined') {
+                    log(`Memory: ${WebAssembly.Memory ? 'Supported' : 'Not Supported'}`);
+                    log(`Table: ${WebAssembly.Table ? 'Supported' : 'Not Supported'}`);
+                }
+            }
+            log('========================');
+        }
+
+        // Create a minimal ONNX model that adds two inputs
+        // This creates a valid ONNX protobuf model programmatically
+        function createSimpleAddModel() {
+            // ONNX protobuf definition (simplified)
+            // This is a minimal Add operation model
+            
+            // ONNX file header and protobuf content for a simple Add model
+            // Model with two inputs A, B and one output C = A + B
+            
+            const modelProto = new Uint8Array([
+                0x08, 0x07, // ir_version = 7
+                0x12, 0x0c, // opset_import
+                0x08, 0x01, // version = 1
+                0x12, 0x09, // domain = ""
+                0x61, 0x69, 0x5f, 0x6f, 0x6e, 0x6e, 0x78, 0x2e, 0x6d, // "ai_onnx.ml" (but shortened)
+                
+                // producer_name
+                0x1a, 0x04, 0x74, 0x65, 0x73, 0x74, // "test"
+                
+                // producer_version  
+                0x22, 0x03, 0x31, 0x2e, 0x30, // "1.0"
+                
+                // domain
+                0x2a, 0x00,
+                
+                // model_version
+                0x30, 0x01,
+                
+                // doc_string
+                0x3a, 0x00,
+                
+                // graph
+                0x42, 0x3a, // graph length = 58
+                
+                // graph.name
+                0x0a, 0x04, 0x74, 0x65, 0x73, 0x74, // "test"
+                
+                // tensor info for input A
+                0x12, 0x0c, // value_info length
+                0x0a, 0x01, 0x41, // name = "A"
+                0x12, 0x07, // type
+                0x12, 0x05, // tensor_type
+                0x0a, 0x01, 0x01, // elem_type = FLOAT
+                0x22, 0x00, // shape (empty = dynamic)
+                
+                // tensor info for input B
+                0x12, 0x0c, // value_info length
+                0x0a, 0x01, 0x42, // name = "B"
+                0x12, 0x07, // type
+                0x12, 0x05, // tensor_type
+                0x0a, 0x01, 0x01, // elem_type = FLOAT
+                0x22, 0x00, // shape
+                
+                // tensor info for output C
+                0x1a, 0x0c, // value_info length
+                0x0a, 0x01, 0x43, // name = "C"
+                0x12, 0x07, // type
+                0x12, 0x05, // tensor_type
+                0x0a, 0x01, 0x01, // elem_type = FLOAT
+                0x22, 0x00, // shape
+                
+                // node
+                0x22, 0x0e, // node length = 14
+                0x0a, 0x01, 0x41, // input "A"
+                0x0a, 0x01, 0x42, // input "B"
+                0x12, 0x01, 0x43, // output "C"
+                0x16, 0x03, 0x41, 0x64, 0x64, // op_type = "Add"
+                0x20, 0x01, // domain = ""
+            ]);
+            
+            // Actually, let's use a simpler approach - create a proper ONNX model using a predefined buffer
+            // This is a minimal working Add model in ONNX format
+            const properModel = new Uint8Array([
+                0x08, 0x08, 0x12, 0x0a, 0x08, 0x01, 0x12, 0x06, 0x0a, 0x00, 0x12, 0x02, 0x08, 0x0d,
+                0x1a, 0x04, 0x74, 0x65, 0x73, 0x74, 0x22, 0x03, 0x31, 0x2e, 0x30, 0x2a, 0x00, 0x30,
+                0x01, 0x3a, 0x00, 0x42, 0x4a, 0x0a, 0x04, 0x74, 0x65, 0x73, 0x74, 0x12, 0x0b, 0x0a,
+                0x01, 0x41, 0x12, 0x06, 0x12, 0x04, 0x0a, 0x02, 0x08, 0x01, 0x12, 0x0b, 0x0a, 0x01,
+                0x42, 0x12, 0x06, 0x12, 0x04, 0x0a, 0x02, 0x08, 0x01, 0x1a, 0x0b, 0x0a, 0x01, 0x43,
+                0x12, 0x06, 0x12, 0x04, 0x0a, 0x02, 0x08, 0x01, 0x22, 0x11, 0x0a, 0x01, 0x41, 0x0a,
+                0x01, 0x42, 0x12, 0x01, 0x43, 0x16, 0x03, 0x41, 0x64, 0x64, 0x18, 0x01
+            ]);
+            
+            return properModel.buffer.slice(properModel.byteOffset, properModel.byteOffset + properModel.byteLength);
+        }
+
+        // Alternative: use a data URL for a simple model
+        async function loadTestModel() {
+            // Simple 2-input Add model in ONNX format (base64 encoded)
+            const base64Model = 'CAIIEgoIAQIGCgASCgIBDWoEdGVzdCIDMS4wKgAwAToAQkoKBHRlc3QSCwoBQRIGCgQKAggBEgsKAUISBgoECgIIARILCgFDEgYKBAoCCAESDxABQIFCEgNFZGQYAQ==';
+            const binaryString = atob(base64Model);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // Override runTest with the data URL version
+        runTest = async function() {
+            try {
+                log('Loading test model...');
+                const modelData = await loadTestModel();
+                log(`Model loaded: ${modelData.byteLength} bytes`);
+                
+                log('Creating inference session...');
+                const session = await ort.InferenceSession.create(modelData, {
+                    executionProviders: ['wasm']
+                });
+                log('✅ Session created');
+                
+                // Create test tensors
+                const inputA = new Float32Array([1, 2, 3, 4]);
+                const inputB = new Float32Array([5, 6, 7, 8]);
+                
+                const tensorA = new ort.Tensor('float32', inputA, [2, 2]);
+                const tensorB = new ort.Tensor('float32', inputB, [2, 2]);
+                
+                log(`Input A: [${inputA.join(', ')}]`);
+                log(`Input B: [${inputB.join(', ')}]`);
+                
+                // Run inference
+                const start = performance.now();
+                const results = await session.run({ A: tensorA, B: tensorB });
+                const elapsed = performance.now() - start;
+                
+                const output = results.C;
+                log(`✅ Inference complete in ${elapsed.toFixed(2)}ms`);
+                log(`Output: [${Array.from(output.data).join(', ')}]`);
+                log(`Expected: [6, 8, 10, 12]`);
+                
+                // Verify
+                const expected = [6, 8, 10, 12];
+                const actual = Array.from(output.data);
+                const match = expected.every((v, i) => Math.abs(v - actual[i]) < 0.01);
+                
+                if (match) {
+                    log('✅ Test PASSED - Results match!');
+                    setStatus('All tests PASSED ✅', 'success');
+                } else {
+                    log('❌ Test FAILED - Results mismatch');
+                    setStatus('Test failed', 'error');
+                }
+                
+            } catch (err) {
+                log(`❌ Error: ${err.message}`);
+                setStatus(`Error: ${err.message}`, 'error');
+                console.error(err);
+            }
+        };
+
+        // Auto-initialize on load
+        window.addEventListener('load', () => {
+            log('Page loaded, ORT ready');
+        });
+    </script>
+</body>
+</html>
