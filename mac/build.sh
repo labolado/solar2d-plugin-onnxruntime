@@ -80,12 +80,11 @@ clang -shared -o "$OUT_DIR/plugin_onnxruntime.dylib" \
     -O2 -Wall \
     "$PLUGIN_DIR/plugin_onnxruntime.c"
 
-# Fix rpath: replace hardcoded Homebrew versioned path with @rpath
+# Fix dylib path: use @loader_path so it finds libonnxruntime.dylib in same directory
+# (needed when distributed via tgz to Simulator/Plugins/)
 ORT_LINKED=$(otool -L "$OUT_DIR/plugin_onnxruntime.dylib" | grep libonnxruntime | awk '{print $1}')
-if [[ "$ORT_LINKED" != "@rpath"* ]]; then
-    install_name_tool -change "$ORT_LINKED" "@rpath/libonnxruntime.dylib" "$OUT_DIR/plugin_onnxruntime.dylib"
-    # Add Homebrew lib as rpath so it still works locally
-    install_name_tool -add_rpath "$ORT_LIB" "$OUT_DIR/plugin_onnxruntime.dylib" 2>/dev/null || true
+if [[ "$ORT_LINKED" != "@loader_path"* ]]; then
+    install_name_tool -change "$ORT_LINKED" "@loader_path/libonnxruntime.dylib" "$OUT_DIR/plugin_onnxruntime.dylib"
 fi
 
 SIZE=$(ls -lh "$OUT_DIR/plugin_onnxruntime.dylib" | awk '{print $5}')
