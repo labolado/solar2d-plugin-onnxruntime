@@ -27,6 +27,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -225,8 +228,18 @@ static int ort_load(lua_State *L) {
 #endif
     }
 
-    /* Create session */
+    /* Create session — Windows requires wchar_t path */
+#ifdef _WIN32
+    {
+        int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
+        wchar_t *wpath = (wchar_t *)malloc(wlen * sizeof(wchar_t));
+        MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
+        ORT_CHECK(g_ort->CreateSession(g_env, wpath, ud->options, &ud->session));
+        free(wpath);
+    }
+#else
     ORT_CHECK(g_ort->CreateSession(g_env, path, ud->options, &ud->session));
+#endif
 
     /* Get default allocator */
     ORT_CHECK(g_ort->GetAllocatorWithDefaultOptions(&ud->allocator));
