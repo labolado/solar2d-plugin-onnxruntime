@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Solar2D ONNX Runtime HTML5 Example</title>
+    <!-- Load ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #4a9eff; }
+        h2 { color: #7dd3fc; margin-top: 30px; }
+        code {
+            background: #0f0f1a;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        pre {
+            background: #0f0f1a;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        .note {
+            background: #2d2d44;
+            border-left: 4px solid #4a9eff;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .warning {
+            background: #3d2d2d;
+            border-left-color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧠 Solar2D ONNX Runtime HTML5 Plugin</h1>
+    
+    <p>This example demonstrates using ONNX Runtime Web with Solar2D's HTML5 JS bridge.</p>
+    
+    <div class="note">
+        <strong>Note:</strong> This HTML file is for documentation. The actual plugin files are:
+        <ul>
+            <li><code>plugin_onnxruntime.lua</code> — Lua wrapper</li>
+            <li><code>plugin_onnxruntime_js.js</code> — JavaScript implementation</li>
+        </ul>
+    </div>
+
+    <h2>📋 Usage in Solar2D</h2>
+    
+    <pre><code>local ort = require("plugin.onnxruntime")
+
+-- Check if available (returns false on simulator/native)
+if not ort.isAvailable() then
+    print("ONNX Runtime not available")
+    return
+end
+
+-- Load model (async with callback)
+ort.load("model.onnx", function(session, error)
+    if error then
+        print("Load failed:", error)
+        return
+    end
+    
+    print("Model loaded!")
+    local info = session:info()
+    print("Inputs:", #info.inputs)
+    print("Outputs:", #info.outputs)
+    
+    -- Prepare input tensor
+    local inputs = {
+        input = {
+            dims = {1, 3, 224, 224},  -- NCHW format
+            data = {0.5, 0.3, ...}     -- 150528 numbers
+        }
+    }
+    
+    -- Run inference (async with callback)
+    session:run(inputs, function(outputs, error)
+        if error then
+            print("Inference failed:", error)
+            session:close()
+            return
+        end
+        
+        -- Process results
+        for name, tensor in pairs(outputs) do
+            print("Output:", name)
+            print("  Shape:", table.concat(tensor.dims, "x"))
+            print("  First value:", tensor.data[1])
+        end
+        
+        session:close()
+    end)
+end)</code></pre>
+
+    <h2>⚙️ Setup Instructions</h2>
+    
+    <ol>
+        <li>Copy the plugin files to your project's <code>web/</code> directory</li>
+        <li>Add to your <code>build.settings</code>:
+            <pre><code>plugins = {
+    ["plugin.onnxruntime"] = {
+        publisherId = "your.publisher.id",
+    }
+}</code></pre>
+        </li>
+        <li>Ensure your HTML5 template includes onnxruntime-web:
+            <pre><code>&lt;script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"&gt;&lt;/script&gt;</code></pre>
+        </li>
+    </ol>
+
+    <h2>🔧 API Differences from Native Plugin</h2>
+    
+    <div class="note warning">
+        <strong>Important:</strong> The HTML5 plugin uses callbacks due to JavaScript's async nature.
+    </div>
+    
+    <table border="1" style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+        <tr style="background: #2d2d44;">
+            <th style="padding: 10px;">Operation</th>
+            <th style="padding: 10px;">Native (C)</th>
+            <th style="padding: 10px;">HTML5 (JS)</th>
+        </tr>
+        <tr>
+            <td style="padding: 10px;"><code>load</code></td>
+            <td style="padding: 10px;"><code>local s = ort.load(path)</code></td>
+            <td style="padding: 10px;"><code>ort.load(path, function(s, err) ... end)</code></td>
+        </tr>
+        <tr style="background: #1f1f2e;">
+            <td style="padding: 10px;"><code>run</code></td>
+            <td style="padding: 10px;"><code>local o = s:run(inputs)</code></td>
+            <td style="padding: 10px;"><code>s:run(inputs, function(o, err) ... end)</code></td>
+        </tr>
+        <tr>
+            <td style="padding: 10px;"><code>close</code></td>
+            <td style="padding: 10px;"><code>s:close()</code></td>
+            <td style="padding: 10px;"><code>s:close()</code> (same)</td>
+        </tr>
+    </table>
+
+    <h2>🚀 Execution Providers</h2>
+    
+    <p>Pass execution provider in options:</p>
+    
+    <pre><code>-- WebGPU (fastest, if available)
+ort.load("model.onnx", function(session) ... end, {
+    ep = "webgpu"
+})
+
+-- WebGL (fallback)
+ort.load("model.onnx", function(session) ... end, {
+    ep = "webgl"
+})
+
+-- WebAssembly CPU (default, always works)
+ort.load("model.onnx", function(session) ... end, {
+    ep = "wasm",
+    intraOpNumThreads = 4
+})</code></pre>
+
+    <h2>📁 File Structure</h2>
+    
+    <pre>
+web/
+├── metadata.lua                  # Plugin metadata
+├── plugin_onnxruntime_js.js      # JS implementation
+├── plugin_onnxruntime.lua        # Lua wrapper
+├── RESEARCH.md                   # Research documentation
+└── example.html                  # This file
+    </pre>
+
+    <h2>🔗 References</h2>
+    
+    <ul>
+        <li><a href="https://onnxruntime.ai/docs/tutorials/web/" style="color: #4a9eff;">ONNX Runtime Web Documentation</a></li>
+        <li><a href="https://docs.coronalabs.com/guide/html5/plugins/index.html" style="color: #4a9eff;">Solar2D HTML5 Plugins Guide</a></li>
+        <li><a href="https://github.com/microsoft/onnxruntime" style="color: #4a9eff;">ONNX Runtime GitHub</a></li>
+    </ul>
+
+</body>
+</html>
