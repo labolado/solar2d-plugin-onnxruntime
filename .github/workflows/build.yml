@@ -122,6 +122,17 @@ jobs:
             ["armeabi-v7a"]="armv7a-linux-androideabi24-clang"
           )
 
+          # Build liblua.so stubs for each ABI (Corona resolves symbols at runtime)
+          LUA_STUB_DIR="/tmp/lua-stub"
+          for ABI in arm64-v8a armeabi-v7a; do
+            CC="$TOOLCHAIN/bin/${ABI_CC[$ABI]}"
+            mkdir -p "$LUA_STUB_DIR/$ABI"
+            $CC -shared -fPIC -o "$LUA_STUB_DIR/$ABI/liblua.so" \
+              -I"$LUA_INCLUDE" -xc /dev/null -Wl,--no-undefined 2>/dev/null || \
+            $CC -shared -fPIC -o "$LUA_STUB_DIR/$ABI/liblua.so" -xc - <<< "" 2>/dev/null || true
+            echo "Lua stub for $ABI: $(ls -lh $LUA_STUB_DIR/$ABI/liblua.so 2>/dev/null)"
+          done
+
           for ABI in arm64-v8a armeabi-v7a; do
             echo "=== Building $ABI ==="
             CC="$TOOLCHAIN/bin/${ABI_CC[$ABI]}"
@@ -139,11 +150,7 @@ jobs:
               -o "$ABI_OUT/libplugin.onnxruntime.so" \
               "$ABI_OUT/plugin_onnxruntime.o" \
               -L"$ORT_DIR/jni/$ABI" -lonnxruntime \
-              -L"$LUA_LIB_DIR/$ABI" -llua 2>/dev/null || \
-            $CC -shared -Wl,--warn-unresolved-symbols \
-              -o "$ABI_OUT/libplugin.onnxruntime.so" \
-              "$ABI_OUT/plugin_onnxruntime.o" \
-              -L"$ORT_DIR/jni/$ABI" -lonnxruntime
+              -L"$LUA_STUB_DIR/$ABI" -llua
 
             rm -f "$ABI_OUT/plugin_onnxruntime.o"
             cp "$ORT_DIR/jni/$ABI/libonnxruntime.so" "$ABI_OUT/"
