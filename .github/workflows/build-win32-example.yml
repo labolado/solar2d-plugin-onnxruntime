@@ -1,0 +1,95 @@
+name: Build Windows Example
+
+on:
+  push:
+    branches: [build/win32-example]
+  workflow_dispatch:
+
+jobs:
+  build-win32-example:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Solar2D
+        shell: pwsh
+        run: |
+          # Download latest Solar2D for Windows
+          $url = "https://github.com/nicetechnica/Solar2D/releases/download/3739/Solar2D-Windows-3739.exe"
+          # Try the official download
+          $releases = Invoke-RestMethod "https://api.github.com/repos/nicetechnica/Solar2D/releases/latest"
+          $asset = $releases.assets | Where-Object { $_.name -match "Solar2D.*Windows.*exe" } | Select-Object -First 1
+          if ($asset) {
+            $url = $asset.browser_download_url
+          }
+          Write-Host "Downloading Solar2D from: $url"
+          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\Solar2D-Setup.exe" -MaximumRetryCount 3
+          # Install silently
+          Start-Process -Wait -FilePath "$env:TEMP\Solar2D-Setup.exe" -ArgumentList "/S"
+          # Find CoronaBuilder
+          $builder = Get-ChildItem "C:\Program Files (x86)\Corona Labs" -Recurse -Filter "CoronaBuilder.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($builder) {
+            Write-Host "CoronaBuilder found at: $($builder.FullName)"
+            echo "CORONA_BUILDER=$($builder.FullName)" >> $env:GITHUB_ENV
+          } else {
+            Write-Host "WARNING: CoronaBuilder not found, trying alternate path"
+            echo "CORONA_BUILDER=C:\Program Files (x86)\Corona Labs\Corona\CoronaBuilder.exe" >> $env:GITHUB_ENV
+          }
+
+      - name: Download plugin tgz from v6 release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path "build\plugins" -Force | Out-Null
+          $plugins = @(
+            "plugin.onnxruntime-win32-sim.tgz",
+            "plugin.Bytemap"
+          )
+          # Download our plugin
+          Invoke-WebRequest -Uri "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v6/plugin.onnxruntime-win32-sim.tgz" -OutFile "build\plugins\plugin.onnxruntime-win32-sim.tgz"
+          # Download Bytemap
+          Invoke-WebRequest -Uri "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-win32-sim.tgz" -OutFile "build\plugins\plugin.Bytemap-win32-sim.tgz"
+
+      - name: Build Windows example
+        shell: cmd
+        run: |
+          if exist "%CORONA_BUILDER%" (
+            echo Building with CoronaBuilder...
+            "%CORONA_BUILDER%" build --lua build\win32-build.lua
+          ) else (
+            echo CoronaBuilder not found, using manual assembly
+          )
+
+      - name: Manual assembly (fallback)
+        shell: pwsh
+        run: |
+          # If CoronaBuilder didn't work, manually assemble the example
+          $outDir = "build\OnnxDemo-Win32"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+
+          # Extract plugin DLLs
+          $pluginDir = "$outDir\Plugins"
+          New-Item -ItemType Directory -Path $pluginDir -Force | Out-Null
+
+          # Extract onnxruntime plugin
+          tar xzf "build\plugins\plugin.onnxruntime-win32-sim.tgz" -C $pluginDir
+          # Extract Bytemap plugin
+          tar xzf "build\plugins\plugin.Bytemap-win32-sim.tgz" -C $pluginDir
+
+          # Copy example resources
+          Copy-Item "example\*" -Destination $outDir -Recurse -Force
+
+          # List contents
+          Write-Host "=== Build output ==="
+          Get-ChildItem $outDir -Recurse | Select-Object FullName
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "build\OnnxDemo-Win32\*" -DestinationPath "build\OnnxDemo-Win32-Example.zip" -Force
+          Write-Host "Package size:"
+          Get-Item "build\OnnxDemo-Win32-Example.zip" | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OnnxDemo-Win32-Example
+          path: build/OnnxDemo-Win32-Example.zip
