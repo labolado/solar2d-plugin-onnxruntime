@@ -40,6 +40,8 @@ tgz-mac: mac
 	@mkdir -p $(TGZ_OUT)/mac-staging
 	@cp build/mac/plugin_onnxruntime.dylib $(TGZ_OUT)/mac-staging/
 	@cp lua/plugin/onnxruntime.lua $(TGZ_OUT)/mac-staging/
+	@ORT_LIB=$$(brew --prefix onnxruntime 2>/dev/null)/lib/libonnxruntime.dylib; \
+	 if [ -f "$$ORT_LIB" ]; then cp "$$ORT_LIB" $(TGZ_OUT)/mac-staging/; fi
 	@cd $(TGZ_OUT)/mac-staging && tar czf ../plugin.onnxruntime-mac-sim.tgz *
 	@rm -rf $(TGZ_OUT)/mac-staging
 	@echo "Package: $(TGZ_OUT)/plugin.onnxruntime-mac-sim.tgz"
