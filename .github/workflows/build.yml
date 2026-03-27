@@ -331,10 +331,15 @@ jobs:
           $URL = "https://github.com/labolado/ort-prebuilt/releases/download/v${ORT_VERSION}-x86/onnxruntime-win-x86-${ORT_VERSION}.zip"
           $OUT = "win32\onnxruntime-win"
           Invoke-WebRequest -Uri $URL -OutFile "$env:TEMP\ort.zip"
-          Expand-Archive -Path "$env:TEMP\ort.zip" -DestinationPath "$env:TEMP\ort-extract" -Force
-          $extracted = Get-ChildItem "$env:TEMP\ort-extract" | Select-Object -First 1
           New-Item -ItemType Directory -Path $OUT -Force | Out-Null
-          Copy-Item -Path "$($extracted.FullName)\*" -Destination $OUT -Recurse -Force
+          Expand-Archive -Path "$env:TEMP\ort.zip" -DestinationPath $OUT -Force
+          # If zip has a nested directory (official releases), flatten it
+          $sub = Get-ChildItem $OUT -Directory | Select-Object -First 1
+          if ($sub -and (Test-Path "$($sub.FullName)\include")) {
+            Copy-Item -Path "$($sub.FullName)\*" -Destination $OUT -Recurse -Force
+            Remove-Item $sub.FullName -Recurse
+          }
+          Write-Host "ORT include:" (Get-ChildItem "$OUT\include" | Select-Object -First 3)
 
       - name: Download Lua 5.1 headers
         shell: pwsh
