@@ -9,7 +9,7 @@ on:
 
 env:
   ORT_VERSION: "1.24.3"
-  ORT_VERSION_WIN: "1.16.3"  # Last version with x86 support (Solar2D Simulator is 32-bit)
+  ORT_VERSION_WIN: "1.19.2"  # Built from source at labolado/ort-prebuilt (supports opset 20)
 
 jobs:
   # ── Compute version string ─────────────────────────────────
@@ -328,7 +328,7 @@ jobs:
         shell: pwsh
         run: |
           $ORT_VERSION = "${{ env.ORT_VERSION_WIN }}"
-          $URL = "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-win-x86-${ORT_VERSION}.zip"
+          $URL = "https://github.com/labolado/ort-prebuilt/releases/download/v${ORT_VERSION}-x86/onnxruntime-win-x86-${ORT_VERSION}.zip"
           $OUT = "win32\onnxruntime-win"
           Invoke-WebRequest -Uri $URL -OutFile "$env:TEMP\ort.zip"
           Expand-Archive -Path "$env:TEMP\ort.zip" -DestinationPath "$env:TEMP\ort-extract" -Force
@@ -350,7 +350,7 @@ jobs:
       - name: Build Lua 5.1 lib
         shell: cmd
         run: |
-          mkdir build\lua51 2>nul
+          mkdir build\lua 2>nul
           cd /d "%LUA_INCLUDE%"
           cl /O2 /c /W3 /DLUA_BUILD_AS_DLL ^
             lapi.c lcode.c ldebug.c ldo.c ldump.c lfunc.c lgc.c llex.c ^
@@ -358,9 +358,9 @@ jobs:
             ltable.c ltm.c lundump.c lvm.c lzio.c lauxlib.c lbaselib.c ^
             ldblib.c liolib.c lmathlib.c loslib.c ltablib.c lstrlib.c ^
             loadlib.c linit.c
-          lib /OUT:lua51.lib *.obj
+          lib /OUT:lua.lib *.obj
           del *.obj
-          echo Built lua51.lib
+          echo Built lua.lib
 
       - name: Build DLL
         shell: cmd
@@ -372,7 +372,7 @@ jobs:
             /I"%LUA_INCLUDE%" ^
             plugin_onnxruntime.c ^
             /Fe"build\win32-sim\plugin_onnxruntime.dll" ^
-            /link /LIBPATH:"win32\onnxruntime-win\lib" /LIBPATH:"%LUA_INCLUDE%" onnxruntime.lib lua51.lib
+            /link /LIBPATH:"win32\onnxruntime-win\lib" /LIBPATH:"%LUA_INCLUDE%" onnxruntime.lib lua.lib
           dir build\win32-sim\plugin_onnxruntime.dll
 
       - name: Package win32-sim tgz
