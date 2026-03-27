@@ -3,7 +3,7 @@
 > **项目**: Solar2D ONNX Runtime 插件 HTML5 支持  
 > **分支**: feature/html5-web-bridge  
 > **时间**: 2026年3月  
-> **作者**: Claude Code Agent
+> **作者**: Labo Lado
 
 ---
 
