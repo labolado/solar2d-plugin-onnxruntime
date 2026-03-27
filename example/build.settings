@@ -12,6 +12,7 @@ settings = {
                 ["mac-sim"]     = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v7/plugin.onnxruntime-mac-sim.tgz" },
                 android         = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v7/plugin.onnxruntime-android.tgz" },
                 ["win32-sim"]   = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v7/plugin.onnxruntime-win32-sim.tgz" },
+                win32           = { url = "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v7/plugin.onnxruntime-win32-sim.tgz" },
             },
         },
         ["plugin.Bytemap"] = {
@@ -22,6 +23,7 @@ settings = {
                 ["mac-sim"]     = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-mac-sim.tgz" },
                 android         = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-android.tgz" },
                 ["win32-sim"]   = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-win32-sim.tgz" },
+                win32           = { url = "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-win32-sim.tgz" },
             },
         },
     },
