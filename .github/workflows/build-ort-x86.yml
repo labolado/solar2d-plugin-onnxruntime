@@ -1,0 +1,66 @@
+name: Build ORT x86
+
+on:
+  workflow_dispatch:
+    inputs:
+      ort_version:
+        description: 'ONNX Runtime version (e.g. 1.21.1)'
+        required: true
+        default: '1.21.1'
+
+jobs:
+  build-ort-x86:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      - name: Clone ONNX Runtime
+        run: |
+          git clone --depth 1 --branch v${{ github.event.inputs.ort_version }} --recursive https://github.com/microsoft/onnxruntime.git C:\ort-src
+
+      - name: Build ORT x86
+        shell: cmd
+        timeout-minutes: 120
+        run: |
+          cd /d C:\ort-src
+          python tools\ci_build\build.py ^
+            --build_dir build\x86 ^
+            --config Release ^
+            --x86 ^
+            --parallel ^
+            --skip_tests ^
+            --build_shared_lib ^
+            --cmake_generator "Visual Studio 17 2022"
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.ort_version }}"
+          $out = "onnxruntime-win-x86-$ver"
+          New-Item -ItemType Directory -Path $out\lib, $out\include -Force | Out-Null
+          
+          # Copy built files
+          Copy-Item "C:\ort-src\build\x86\Release\Release\onnxruntime.dll" "$out\lib\"
+          Copy-Item "C:\ort-src\build\x86\Release\Release\onnxruntime.lib" "$out\lib\"
+          
+          # Copy headers
+          Copy-Item "C:\ort-src\include\onnxruntime\core\session\onnxruntime_c_api.h" "$out\include\"
+          Copy-Item "C:\ort-src\include\onnxruntime\core\session\onnxruntime_run_options_config_keys.h" "$out\include\" -ErrorAction SilentlyContinue
+          Copy-Item "C:\ort-src\include\onnxruntime\core\session\onnxruntime_session_options_config_keys.h" "$out\include\" -ErrorAction SilentlyContinue
+          
+          Compress-Archive -Path "$out\*" -DestinationPath "$out.zip"
+          Write-Host "Package: $out.zip"
+          Get-Item "$out.zip" | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: onnxruntime-win-x86-${{ github.event.inputs.ort_version }}
+          path: onnxruntime-win-x86-*.zip
