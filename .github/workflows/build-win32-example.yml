@@ -11,83 +11,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Solar2D
-        shell: pwsh
-        run: |
-          # Download latest Solar2D for Windows
-          $url = "https://github.com/nicetechnica/Solar2D/releases/download/3739/Solar2D-Windows-3739.exe"
-          # Try the official download
-          $releases = Invoke-RestMethod "https://api.github.com/repos/nicetechnica/Solar2D/releases/latest"
-          $asset = $releases.assets | Where-Object { $_.name -match "Solar2D.*Windows.*exe" } | Select-Object -First 1
-          if ($asset) {
-            $url = $asset.browser_download_url
-          }
-          Write-Host "Downloading Solar2D from: $url"
-          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\Solar2D-Setup.exe" -MaximumRetryCount 3
-          # Install silently
-          Start-Process -Wait -FilePath "$env:TEMP\Solar2D-Setup.exe" -ArgumentList "/S"
-          # Find CoronaBuilder
-          $builder = Get-ChildItem "C:\Program Files (x86)\Corona Labs" -Recurse -Filter "CoronaBuilder.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($builder) {
-            Write-Host "CoronaBuilder found at: $($builder.FullName)"
-            echo "CORONA_BUILDER=$($builder.FullName)" >> $env:GITHUB_ENV
-          } else {
-            Write-Host "WARNING: CoronaBuilder not found, trying alternate path"
-            echo "CORONA_BUILDER=C:\Program Files (x86)\Corona Labs\Corona\CoronaBuilder.exe" >> $env:GITHUB_ENV
-          }
-
-      - name: Download plugin tgz from v6 release
+      - name: Download plugins
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path "build\plugins" -Force | Out-Null
-          $plugins = @(
-            "plugin.onnxruntime-win32-sim.tgz",
-            "plugin.Bytemap"
-          )
-          # Download our plugin
-          Invoke-WebRequest -Uri "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v6/plugin.onnxruntime-win32-sim.tgz" -OutFile "build\plugins\plugin.onnxruntime-win32-sim.tgz"
-          # Download Bytemap
-          Invoke-WebRequest -Uri "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-win32-sim.tgz" -OutFile "build\plugins\plugin.Bytemap-win32-sim.tgz"
+          Invoke-WebRequest -Uri "https://github.com/labolado/solar2d-plugin-onnxruntime/releases/download/v6/plugin.onnxruntime-win32-sim.tgz" -OutFile "build\plugins\onnxruntime.tgz"
+          Invoke-WebRequest -Uri "https://github.com/solar2d/com.xibalbastudios-plugin.Bytemap/releases/download/v9/2016.2874-win32-sim.tgz" -OutFile "build\plugins\bytemap.tgz"
 
-      - name: Build Windows example
-        shell: cmd
-        run: |
-          if exist "%CORONA_BUILDER%" (
-            echo Building with CoronaBuilder...
-            "%CORONA_BUILDER%" build --lua build\win32-build.lua
-          ) else (
-            echo CoronaBuilder not found, using manual assembly
-          )
-
-      - name: Manual assembly (fallback)
+      - name: Assemble example package
         shell: pwsh
         run: |
-          # If CoronaBuilder didn't work, manually assemble the example
-          $outDir = "build\OnnxDemo-Win32"
-          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          $out = "build\OnnxDemo-Win32"
+          New-Item -ItemType Directory -Path "$out\Plugins" -Force | Out-Null
 
           # Extract plugin DLLs
-          $pluginDir = "$outDir\Plugins"
-          New-Item -ItemType Directory -Path $pluginDir -Force | Out-Null
+          tar xzf "build\plugins\onnxruntime.tgz" -C "$out\Plugins"
+          tar xzf "build\plugins\bytemap.tgz" -C "$out\Plugins"
 
-          # Extract onnxruntime plugin
-          tar xzf "build\plugins\plugin.onnxruntime-win32-sim.tgz" -C $pluginDir
-          # Extract Bytemap plugin
-          tar xzf "build\plugins\plugin.Bytemap-win32-sim.tgz" -C $pluginDir
+          # Copy example project files
+          Copy-Item "example\main.lua" -Destination $out
+          Copy-Item "example\config.lua" -Destination $out
+          Copy-Item "example\build.settings" -Destination $out
+          Copy-Item "example\test_photo.png" -Destination $out
+          Copy-Item "example\test_photo.dat" -Destination $out
+          Copy-Item "example\candy.onnx" -Destination $out
+          Copy-Item "example\mosaic.onnx" -Destination $out
+          Copy-Item "example\kitten_tts_nano_v0_1.onnx" -Destination $out
 
-          # Copy example resources
-          Copy-Item "example\*" -Destination $outDir -Recurse -Force
+          # Create README
+          @"
+          ONNX Runtime Plugin Demo for Solar2D (Windows)
+          ==============================================
 
-          # List contents
-          Write-Host "=== Build output ==="
-          Get-ChildItem $outDir -Recurse | Select-Object FullName
+          How to run:
+          1. Install Solar2D from https://solar2d.com
+          2. Copy everything in Plugins\ folder to:
+               %APPDATA%\Corona Labs\Corona Simulator\Plugins\
+          3. Open Solar2D Simulator
+          4. File -> Open Project -> select main.lua in this folder
+          "@ | Set-Content "$out\README.txt"
 
-      - name: Package
+          Write-Host "=== Package contents ==="
+          Get-ChildItem $out -Recurse | Select-Object FullName
+
+      - name: Package zip
         shell: pwsh
         run: |
           Compress-Archive -Path "build\OnnxDemo-Win32\*" -DestinationPath "build\OnnxDemo-Win32-Example.zip" -Force
-          Write-Host "Package size:"
-          Get-Item "build\OnnxDemo-Win32-Example.zip" | Select-Object Name, Length
+          $size = (Get-Item "build\OnnxDemo-Win32-Example.zip").Length / 1MB
+          Write-Host "Package: OnnxDemo-Win32-Example.zip ($([math]::Round($size, 1)) MB)"
 
       - uses: actions/upload-artifact@v4
         with:
